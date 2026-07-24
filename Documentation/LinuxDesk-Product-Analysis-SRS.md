@@ -15,7 +15,7 @@
 |---|---|
 | Document ID | LD-SRS-001 |
 | Revision | 1.0 |
-| Authors | Product Architecture Group |
+| Authors | Dipak R Suryawanshi |
 | Reviewers | Engineering Lead, Security Lead, UX Lead |
 | Approval Required From | Product Owner, CTO |
 | Next Review | Prior to Phase 1 kickoff |
@@ -24,9 +24,9 @@
 
 | Ver | Date | Author | Change Summary |
 |---|---|---|---|
-| 0.1 | — | Architecture | Initial skeleton, scope capture |
-| 0.5 | — | Architecture | Market analysis, functional requirements |
-| 1.0 | 2026-07-24 | Architecture | Full draft: all 15 sections, roadmap, risk register |
+| 0.1 | — | Dipak R Suryawanshi | Initial skeleton, scope capture |
+| 0.5 | — | Dipak R Suryawanshi | Market analysis, functional requirements |
+| 1.0 | 2026-07-24 | Dipak R Suryawanshi | Full draft: all 15 sections, roadmap, risk register |
 
 ### Intended Audience
 
