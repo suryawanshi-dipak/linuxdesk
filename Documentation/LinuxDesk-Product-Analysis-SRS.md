@@ -15,7 +15,7 @@
 |---|---|
 | Document ID | LD-SRS-001 |
 | Revision | 1.0 |
-| Authors | Product Architecture Group |
+| Authors | Dipak R Suryawanshi |
 | Reviewers | Engineering Lead, Security Lead, UX Lead |
 | Approval Required From | Product Owner, CTO |
 | Next Review | Prior to Phase 1 kickoff |
