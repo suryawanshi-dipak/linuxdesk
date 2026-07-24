@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Priority?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane styleClass="login-root" xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml" fx:controller="com.linuxdesk.ui.LoginController">
+    <center>
+        <VBox spacing="20" styleClass="login-card" BorderPane.alignment="CENTER"
+              prefWidth="780" maxWidth="-Infinity" maxHeight="-Infinity">
+            <padding>
+                <Insets top="28" right="34" bottom="26" left="34"/>
+            </padding>
+
+            <Label text="Connect to VM" styleClass="login-title"/>
+
+            <HBox spacing="20">
+                <VBox spacing="6" HBox.hgrow="ALWAYS">
+                    <Label text="Host / IP" styleClass="field-label"/>
+                    <TextField fx:id="hostField" promptText="203.0.113.10" styleClass="field-input"/>
+                </VBox>
+                <VBox spacing="6" prefWidth="90">
+                    <Label text="Port" styleClass="field-label"/>
+                    <TextField fx:id="portField" promptText="22" styleClass="field-input"/>
+                </VBox>
+                <VBox spacing="6" HBox.hgrow="ALWAYS">
+                    <Label text="Username" styleClass="field-label"/>
+                    <TextField fx:id="usernameField" promptText="ubuntu" styleClass="field-input"/>
+                </VBox>
+            </HBox>
+
+            <HBox spacing="20">
+                <VBox spacing="6" HBox.hgrow="ALWAYS">
+                    <Label text="Private key file" styleClass="field-label"/>
+                    <HBox spacing="8">
+                        <TextField fx:id="keyPathField" promptText="C:\Users\you\.ssh\id_ed25519"
+                                   styleClass="field-input" HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="browseButton" text="Browse..." onAction="#onBrowseKey"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                </VBox>
+                <VBox spacing="6" HBox.hgrow="ALWAYS">
+                    <Label text="Key passphrase (optional, never saved)" styleClass="field-label"/>
+                    <PasswordField fx:id="passphraseField" styleClass="field-input"/>
+                </VBox>
+            </HBox>
+
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <Label text="EQUIVALENT TO" styleClass="equivalent-tag"/>
+                <Label fx:id="commandPreviewLabel" styleClass="command-preview"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="statusLabel" styleClass="status-label"/>
+            </HBox>
+
+            <HBox spacing="10" alignment="CENTER_RIGHT">
+                <Button text="Save profile" onAction="#onSaveProfile" styleClass="secondary-button"/>
+                <Button fx:id="testConnectionButton" text="Test connection" onAction="#onTestConnection"
+                        styleClass="primary-button"/>
+            </HBox>
+        </VBox>
+    </center>
+</BorderPane>

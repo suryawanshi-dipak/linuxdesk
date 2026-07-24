@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+
+<BorderPane styleClass="desktop-root" xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml" fx:controller="com.linuxdesk.ui.DesktopController">
+    <top>
+        <HBox spacing="12" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
+            <padding>
+                <Insets top="10" right="16" bottom="10" left="16"/>
+            </padding>
+            <Button fx:id="backButton" text="← Back" onAction="#onBack" styleClass="secondary-button"/>
+            <Label fx:id="hostLabel" styleClass="host-label"/>
+            <Label fx:id="pathLabel" styleClass="path-label"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="statusLabel" styleClass="status-label"/>
+            <Button text="Disconnect" onAction="#onDisconnect" styleClass="secondary-button"/>
+        </HBox>
+    </top>
+    <center>
+        <ScrollPane fx:id="scrollPane" fitToWidth="true" styleClass="desktop-scroll">
+            <FlowPane fx:id="iconGrid" hgap="18" vgap="18" styleClass="desktop-surface">
+                <padding>
+                    <Insets top="20" right="20" bottom="20" left="20"/>
+                </padding>
+            </FlowPane>
+        </ScrollPane>
+    </center>
+</BorderPane>

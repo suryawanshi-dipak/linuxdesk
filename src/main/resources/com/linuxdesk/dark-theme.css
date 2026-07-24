@@ -1,0 +1,193 @@
+.root {
+    -fx-background-color: #12151c;
+    -fx-font-family: "Segoe UI", sans-serif;
+    -fx-font-size: 13px;
+}
+
+/* ---------- Custom title bar ---------- */
+
+.title-bar {
+    -fx-background-color: #171b24;
+    -fx-border-color: transparent transparent #2a2f3a transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.title-bar-icon {
+    -fx-text-fill: #4fd67a;
+    -fx-font-size: 13px;
+}
+
+.title-bar-label {
+    -fx-text-fill: #d3d7de;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.title-bar-btn, .title-bar-theme-btn {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+    -fx-text-fill: #8b93a3;
+    -fx-font-size: 12px;
+    -fx-padding: 8 14 8 14;
+    -fx-cursor: hand;
+}
+
+.title-bar-btn:hover, .title-bar-theme-btn:hover {
+    -fx-background-color: #232833;
+    -fx-text-fill: #e8e8ec;
+}
+
+.title-bar-btn-close {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+    -fx-text-fill: #8b93a3;
+    -fx-font-size: 12px;
+    -fx-padding: 8 16 8 16;
+    -fx-cursor: hand;
+}
+
+.title-bar-btn-close:hover {
+    -fx-background-color: #e5657a;
+    -fx-text-fill: white;
+}
+
+/* ---------- Login screen ---------- */
+
+.login-root {
+    -fx-background-color: #12151c;
+}
+
+.login-card {
+    -fx-background-color: #171b24;
+    -fx-background-radius: 10;
+    -fx-border-color: #262b36;
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 24, 0.25, 0, 8);
+}
+
+.login-title {
+    -fx-text-fill: #e8e8ec;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.field-label {
+    -fx-text-fill: #8b93a3;
+    -fx-font-size: 11px;
+}
+
+.field-input {
+    -fx-background-color: #0d1017;
+    -fx-text-fill: #e8e8ec;
+    -fx-prompt-text-fill: #565d6b;
+    -fx-border-color: #2a2f3a;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 8 10 8 10;
+    -fx-font-family: "Consolas", monospace;
+}
+
+.field-input:focused {
+    -fx-border-color: #3d7bd9;
+}
+
+.equivalent-tag {
+    -fx-text-fill: #565d6b;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.command-preview {
+    -fx-text-fill: #4fd67a;
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 12px;
+}
+
+.status-label {
+    -fx-font-size: 11px;
+    -fx-text-fill: #8b93a3;
+}
+
+.status-label.status-ok {
+    -fx-text-fill: #4fd67a;
+}
+
+.status-label.status-error {
+    -fx-text-fill: #e5657a;
+}
+
+.primary-button {
+    -fx-background-color: #2ea043;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 4;
+    -fx-padding: 8 18 8 18;
+}
+
+.primary-button:hover {
+    -fx-background-color: #35b94c;
+}
+
+.primary-button:disabled {
+    -fx-opacity: 0.6;
+}
+
+.secondary-button {
+    -fx-background-color: #232833;
+    -fx-text-fill: #d3d7de;
+    -fx-background-radius: 4;
+    -fx-padding: 8 16 8 16;
+}
+
+.secondary-button:hover {
+    -fx-background-color: #2d333f;
+}
+
+/* ---------- Desktop / folder view ---------- */
+
+.desktop-root {
+    -fx-background-color: #12151c;
+}
+
+.desktop-toolbar {
+    -fx-background-color: #171b24;
+    -fx-border-color: transparent transparent #2a2f3a transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.host-label {
+    -fx-text-fill: #8b93a3;
+    -fx-font-size: 12px;
+}
+
+.path-label {
+    -fx-text-fill: #e8e8ec;
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 12px;
+}
+
+.desktop-scroll {
+    -fx-background-color: #12151c;
+    -fx-background: #12151c;
+}
+
+.desktop-surface {
+    -fx-background-color: #12151c;
+}
+
+.desktop-icon {
+    -fx-cursor: hand;
+    -fx-padding: 8;
+    -fx-background-radius: 6;
+}
+
+.desktop-icon:hover {
+    -fx-background-color: #1d2230;
+}
+
+.desktop-icon-label {
+    -fx-text-fill: #d3d7de;
+    -fx-font-size: 11px;
+    -fx-text-alignment: center;
+}
