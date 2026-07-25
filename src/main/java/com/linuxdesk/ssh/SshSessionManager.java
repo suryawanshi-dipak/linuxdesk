@@ -9,10 +9,14 @@ import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.SftpClientFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -76,6 +80,19 @@ public class SshSessionManager implements AutoCloseable {
             return a.name().compareToIgnoreCase(b.name());
         });
         return entries;
+    }
+
+    public String readFile(String path) throws IOException {
+        try (InputStream in = sftpClient.read(path, EnumSet.of(SftpClient.OpenMode.Read))) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    public void writeFile(String path, String content) throws IOException {
+        try (OutputStream out = sftpClient.write(path,
+                EnumSet.of(SftpClient.OpenMode.Create, SftpClient.OpenMode.Write, SftpClient.OpenMode.Truncate))) {
+            out.write(content.getBytes(StandardCharsets.UTF_8));
+        }
     }
 
     public boolean isConnected() {

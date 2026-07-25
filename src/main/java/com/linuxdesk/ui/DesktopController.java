@@ -6,7 +6,10 @@ import com.linuxdesk.ssh.RemoteEntry;
 import com.linuxdesk.ssh.SshSessionManager;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.geometry.Pos;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -14,12 +17,15 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 
 public class DesktopController {
+
+    private static final long MAX_EDITABLE_SIZE = 2 * 1024 * 1024;
 
     @FXML private Label hostLabel;
     @FXML private Label pathLabel;
@@ -105,11 +111,58 @@ public class DesktopController {
         box.getChildren().addAll(icon, label);
 
         box.setOnMouseClicked(event -> {
-            if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2 && entry.directory()) {
+            if (event.getButton() != MouseButton.PRIMARY || event.getClickCount() != 2) {
+                return;
+            }
+            if (entry.directory()) {
                 navigateTo(entry.path(), true);
+            } else {
+                openFileEditor(entry);
             }
         });
 
         return box;
+    }
+
+    private void openFileEditor(RemoteEntry entry) {
+        if (entry.size() > MAX_EDITABLE_SIZE) {
+            statusLabel.setText("File too large to edit: " + entry.name());
+            return;
+        }
+        statusLabel.setText("Opening " + entry.name() + "...");
+
+        Thread worker = new Thread(() -> {
+            try {
+                String content = sessionManager.readFile(entry.path());
+                Platform.runLater(() -> showEditor(entry, content));
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Failed to open file: " + e.getMessage()));
+            }
+        }, "sftp-read");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void showEditor(RemoteEntry entry, String content) {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/editor.fxml"));
+            Parent root = loader.load();
+
+            Scene scene = new Scene(root, 800, 600);
+            ThemeManager.apply(scene);
+
+            Stage editorStage = new Stage();
+            editorStage.setTitle(entry.name() + " — LinuxDesk");
+            editorStage.initOwner(iconGrid.getScene().getWindow());
+            editorStage.setScene(scene);
+
+            EditorController controller = loader.getController();
+            controller.init(sessionManager, entry, content, editorStage);
+
+            editorStage.show();
+            statusLabel.setText("Editing " + entry.name());
+        } catch (Exception e) {
+            statusLabel.setText("Failed to open editor: " + e.getMessage());
+        }
     }
 }

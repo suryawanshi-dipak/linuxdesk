@@ -191,3 +191,27 @@
     -fx-font-size: 11px;
     -fx-text-alignment: center;
 }
+
+/* ---------- File editor ---------- */
+
+.editor-root {
+    -fx-background-color: #f4f5f7;
+}
+
+.editor-textarea {
+    -fx-background-color: #f4f5f7;
+}
+
+.editor-textarea .content {
+    -fx-background-color: #ffffff;
+}
+
+.editor-textarea .text-area {
+    -fx-text-fill: #1a1d24;
+}
+
+.editor-textarea, .editor-textarea .text-area {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-text-fill: #1a1d24;
+}
