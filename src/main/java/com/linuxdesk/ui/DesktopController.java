@@ -365,16 +365,50 @@ public class DesktopController {
             }
             String parent = currentPath;
             String newPath = parent.endsWith("/") ? parent + trimmed : parent + "/" + trimmed;
+            performRename(entry, newPath, trimmed);
+        });
+    }
+
+    private void performRename(RemoteEntry entry, String newPath, String newName) {
+        statusLabel.setText("Renaming " + entry.name() + "...");
+
+        Thread worker = new Thread(() -> {
+            try {
+                if (sessionManager.exists(newPath)) {
+                    Platform.runLater(() -> confirmOverwriteRename(entry, newPath, newName));
+                    return;
+                }
+                sessionManager.rename(entry.path(), newPath);
+                Platform.runLater(() -> navigateTo(currentPath, false));
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Rename failed: " + e.getMessage()));
+            }
+        }, "sftp-rename");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void confirmOverwriteRename(RemoteEntry entry, String newPath, String newName) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "\"" + newName + "\" already exists in this folder. Replace it?",
+                ButtonType.YES, ButtonType.NO);
+        ThemeManager.apply(confirm.getDialogPane());
+        confirm.setHeaderText(null);
+        confirm.showAndWait().ifPresent(button -> {
+            if (button != ButtonType.YES) {
+                statusLabel.setText("Rename cancelled.");
+                return;
+            }
             statusLabel.setText("Renaming " + entry.name() + "...");
 
             Thread worker = new Thread(() -> {
                 try {
-                    sessionManager.rename(entry.path(), newPath);
+                    sessionManager.renameOverwrite(entry.path(), newPath);
                     Platform.runLater(() -> navigateTo(currentPath, false));
                 } catch (Exception e) {
                     Platform.runLater(() -> statusLabel.setText("Rename failed: " + e.getMessage()));
                 }
-            }, "sftp-rename");
+            }, "sftp-rename-overwrite");
             worker.setDaemon(true);
             worker.start();
         });

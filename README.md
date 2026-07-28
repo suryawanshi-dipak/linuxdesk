@@ -30,7 +30,6 @@ Early v1 in active development. The login window, SSH/SFTP connection, remote fo
 - No window edge-resizing yet (undecorated window can still be maximized/minimized/moved, just not resized by dragging an edge).
 - Single saved profile only — no multi-profile management UI yet.
 - SFTP has no server-side copy command, so Paste streams file bytes through the client; large files/directories will be slower than a native `cp` on the server.
-- Rename fails if the destination name already exists (no overwrite) — the status bar surfaces the SFTP error rather than silently replacing the target.
 - The terminal is a simple line-based PTY console, not a full terminal emulator — full-screen interactive programs (vim, top, less) won't render correctly in it.
 
 ## Getting started

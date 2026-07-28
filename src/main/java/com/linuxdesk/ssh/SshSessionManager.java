@@ -109,6 +109,10 @@ public class SshSessionManager implements AutoCloseable {
         sftpClient.rename(oldPath, newPath);
     }
 
+    public void renameOverwrite(String oldPath, String newPath) throws IOException {
+        sftpClient.rename(oldPath, newPath, SftpClient.CopyMode.Overwrite);
+    }
+
     public void createDirectory(String path) throws IOException {
         sftpClient.mkdir(path);
     }
