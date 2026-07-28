@@ -15,9 +15,13 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.StackPane;
@@ -25,6 +29,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.util.ArrayDeque;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
 
@@ -39,20 +44,115 @@ public class DesktopController {
     @FXML private ScrollPane scrollPane;
     @FXML private Label statusLabel;
 
+    private enum SortMode { NAME, SIZE }
+
     private SshSessionManager sessionManager;
     private final Deque<String> history = new ArrayDeque<>();
     private String currentPath;
     private RemoteEntry clipboardEntry;
+    private List<RemoteEntry> currentEntries = List.of();
+    private SortMode sortMode = SortMode.NAME;
 
     @FXML
     private void initialize() {
-        iconGrid.setOnContextMenuRequested(event -> {
-            ContextMenu menu = new ContextMenu();
-            MenuItem pasteItem = new MenuItem("Paste");
-            pasteItem.setDisable(clipboardEntry == null);
-            pasteItem.setOnAction(e -> pasteClipboard());
-            menu.getItems().add(pasteItem);
-            menu.show(iconGrid, event.getScreenX(), event.getScreenY());
+        scrollPane.setOnContextMenuRequested(event -> {
+            createBackgroundContextMenu().show(scrollPane, event.getScreenX(), event.getScreenY());
+        });
+    }
+
+    private ContextMenu createBackgroundContextMenu() {
+        ContextMenu menu = new ContextMenu();
+
+        MenuItem refreshItem = new MenuItem("Refresh");
+        refreshItem.setOnAction(e -> navigateTo(currentPath, false));
+
+        Menu newMenu = new Menu("New");
+        MenuItem newFolderItem = new MenuItem("Folder...");
+        newFolderItem.setOnAction(e -> createNewFolder());
+        MenuItem newFileItem = new MenuItem("File...");
+        newFileItem.setOnAction(e -> createNewFile());
+        newMenu.getItems().addAll(newFolderItem, newFileItem);
+
+        Menu sortMenu = new Menu("Sort by");
+        ToggleGroup sortGroup = new ToggleGroup();
+        RadioMenuItem sortByName = new RadioMenuItem("Name");
+        sortByName.setToggleGroup(sortGroup);
+        sortByName.setSelected(sortMode == SortMode.NAME);
+        sortByName.setOnAction(e -> applySortMode(SortMode.NAME));
+        RadioMenuItem sortBySize = new RadioMenuItem("Size");
+        sortBySize.setToggleGroup(sortGroup);
+        sortBySize.setSelected(sortMode == SortMode.SIZE);
+        sortBySize.setOnAction(e -> applySortMode(SortMode.SIZE));
+        sortMenu.getItems().addAll(sortByName, sortBySize);
+
+        MenuItem pasteItem = new MenuItem("Paste");
+        pasteItem.setDisable(clipboardEntry == null);
+        pasteItem.setOnAction(e -> pasteClipboard());
+
+        MenuItem terminalItem = new MenuItem("Open Terminal Here");
+        terminalItem.setOnAction(e -> openTerminalWindow(currentPath));
+
+        menu.getItems().addAll(refreshItem, sortMenu, newMenu, new SeparatorMenuItem(),
+                pasteItem, terminalItem);
+        return menu;
+    }
+
+    private void applySortMode(SortMode mode) {
+        sortMode = mode;
+        renderEntries(currentEntries);
+    }
+
+    private void createNewFolder() {
+        TextInputDialog dialog = new TextInputDialog("New Folder");
+        ThemeManager.apply(dialog.getDialogPane());
+        dialog.setHeaderText(null);
+        dialog.setTitle("New Folder");
+        dialog.setContentText("Folder name:");
+        dialog.showAndWait().ifPresent(name -> {
+            String trimmed = name.trim();
+            if (trimmed.isEmpty()) {
+                return;
+            }
+            String path = currentPath.endsWith("/") ? currentPath + trimmed : currentPath + "/" + trimmed;
+            statusLabel.setText("Creating folder " + trimmed + "...");
+
+            Thread worker = new Thread(() -> {
+                try {
+                    sessionManager.createDirectory(path);
+                    Platform.runLater(() -> navigateTo(currentPath, false));
+                } catch (Exception e) {
+                    Platform.runLater(() -> statusLabel.setText("Create folder failed: " + e.getMessage()));
+                }
+            }, "sftp-mkdir");
+            worker.setDaemon(true);
+            worker.start();
+        });
+    }
+
+    private void createNewFile() {
+        TextInputDialog dialog = new TextInputDialog("New File.txt");
+        ThemeManager.apply(dialog.getDialogPane());
+        dialog.setHeaderText(null);
+        dialog.setTitle("New File");
+        dialog.setContentText("File name:");
+        dialog.showAndWait().ifPresent(name -> {
+            String trimmed = name.trim();
+            if (trimmed.isEmpty()) {
+                return;
+            }
+            String path = currentPath.endsWith("/") ? currentPath + trimmed : currentPath + "/" + trimmed;
+            statusLabel.setText("Creating file " + trimmed + "...");
+
+            Thread worker = new Thread(() -> {
+                try {
+                    sessionManager.writeFile(path, "");
+                    Platform.runLater(() -> navigateTo(currentPath, false));
+                } catch (Exception e) {
+                    Platform.runLater(() -> statusLabel.setText("Create file failed: " + e.getMessage()));
+                }
+            }, "sftp-touch");
+            worker.setDaemon(true);
+            worker.start();
         });
     }
 
@@ -74,6 +174,10 @@ public class DesktopController {
 
     @FXML
     private void onOpenTerminal() {
+        openTerminalWindow(null);
+    }
+
+    private void openTerminalWindow(String initialDirectory) {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/terminal.fxml"));
             Parent root = loader.load();
@@ -86,7 +190,7 @@ public class DesktopController {
             terminalStage.setScene(scene);
 
             TerminalController controller = loader.getController();
-            controller.init(sessionManager, hostLabel.getText(), terminalStage);
+            controller.init(sessionManager, hostLabel.getText(), initialDirectory, terminalStage);
 
             terminalStage.show();
         } catch (Exception e) {
@@ -127,11 +231,23 @@ public class DesktopController {
     }
 
     private void renderEntries(List<RemoteEntry> entries) {
+        currentEntries = entries;
+        List<RemoteEntry> sorted = sortEntries(entries, sortMode);
+
         iconGrid.getChildren().clear();
-        for (RemoteEntry entry : entries) {
+        for (RemoteEntry entry : sorted) {
             iconGrid.getChildren().add(createIconNode(entry));
         }
         statusLabel.setText(entries.size() + " item" + (entries.size() == 1 ? "" : "s"));
+    }
+
+    private static List<RemoteEntry> sortEntries(List<RemoteEntry> entries, SortMode mode) {
+        Comparator<RemoteEntry> comparator = mode == SortMode.SIZE
+                ? Comparator.comparingLong(RemoteEntry::size)
+                : Comparator.comparing(RemoteEntry::name, String.CASE_INSENSITIVE_ORDER);
+        return entries.stream()
+                .sorted(Comparator.<RemoteEntry>comparingInt(e -> e.directory() ? 0 : 1).thenComparing(comparator))
+                .toList();
     }
 
     private VBox createIconNode(RemoteEntry entry) {
@@ -238,6 +354,7 @@ public class DesktopController {
 
     private void renameEntry(RemoteEntry entry) {
         TextInputDialog dialog = new TextInputDialog(entry.name());
+        ThemeManager.apply(dialog.getDialogPane());
         dialog.setHeaderText(null);
         dialog.setTitle("Rename");
         dialog.setContentText("New name:");
@@ -267,6 +384,7 @@ public class DesktopController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "Delete " + entry.name() + "? This cannot be undone.",
                 ButtonType.YES, ButtonType.NO);
+        ThemeManager.apply(confirm.getDialogPane());
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button != ButtonType.YES) {

@@ -24,6 +24,10 @@ public class TerminalController {
     private final AnsiFilter ansiFilter = new AnsiFilter();
 
     public void init(SshSessionManager sessionManager, String title, Stage stage) {
+        init(sessionManager, title, null, stage);
+    }
+
+    public void init(SshSessionManager sessionManager, String title, String initialDirectory, Stage stage) {
         stage.setTitle(title + " — Terminal");
         stage.addEventFilter(WindowEvent.WINDOW_CLOSE_REQUEST, event -> closeTerminal());
 
@@ -36,6 +40,9 @@ public class TerminalController {
         Thread worker = new Thread(() -> {
             try {
                 terminalSession = sessionManager.openTerminal();
+                if (initialDirectory != null && !initialDirectory.isEmpty()) {
+                    sendRaw("cd " + shellQuote(initialDirectory) + "\n");
+                }
                 pumpOutput(terminalSession.getOutput());
             } catch (IOException e) {
                 Platform.runLater(() -> {
@@ -46,6 +53,10 @@ public class TerminalController {
         }, "ssh-terminal");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    private static String shellQuote(String path) {
+        return "'" + path.replace("'", "'\\''") + "'";
     }
 
     private void pumpOutput(InputStream out) {
@@ -66,16 +77,20 @@ public class TerminalController {
     private void sendCommand() {
         String command = commandField.getText();
         commandField.clear();
-        if (terminalSession == null || !terminalSession.isOpen()) {
-            return;
-        }
         try {
-            OutputStream in = terminalSession.getInput();
-            in.write((command + "\n").getBytes(StandardCharsets.UTF_8));
-            in.flush();
+            sendRaw(command + "\n");
         } catch (IOException e) {
             outputArea.appendText("\n[send failed: " + e.getMessage() + "]\n");
         }
+    }
+
+    private void sendRaw(String text) throws IOException {
+        if (terminalSession == null || !terminalSession.isOpen()) {
+            return;
+        }
+        OutputStream in = terminalSession.getInput();
+        in.write(text.getBytes(StandardCharsets.UTF_8));
+        in.flush();
     }
 
     private void closeTerminal() {

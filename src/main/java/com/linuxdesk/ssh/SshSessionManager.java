@@ -109,6 +109,10 @@ public class SshSessionManager implements AutoCloseable {
         sftpClient.rename(oldPath, newPath);
     }
 
+    public void createDirectory(String path) throws IOException {
+        sftpClient.mkdir(path);
+    }
+
     public void delete(RemoteEntry entry) throws IOException {
         if (entry.directory()) {
             deleteDirectoryRecursive(entry.path());

@@ -233,7 +233,7 @@
 .terminal-output, .terminal-output .text-area {
     -fx-font-family: "Consolas", monospace;
     -fx-font-size: 13px;
-    -fx-text-fill: #4fd67a;
+    -fx-text-fill: #e8e8ec;
 }
 
 .terminal-input {
@@ -249,4 +249,59 @@
 
 .terminal-input:focused {
     -fx-border-color: #3d7bd9;
+}
+
+/* ---------- Dialogs (Alert / TextInputDialog) ---------- */
+
+.dialog-pane {
+    -fx-background-color: #171b24;
+}
+
+.dialog-pane .header-panel {
+    -fx-background-color: #171b24;
+}
+
+.dialog-pane .header-panel .label {
+    -fx-text-fill: #e8e8ec;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.dialog-pane .content.label,
+.dialog-pane .content {
+    -fx-text-fill: #d3d7de;
+}
+
+.dialog-pane .text-field {
+    -fx-background-color: #0d1017;
+    -fx-text-fill: #e8e8ec;
+    -fx-prompt-text-fill: #565d6b;
+    -fx-border-color: #2a2f3a;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 6 8 6 8;
+}
+
+.dialog-pane .text-field:focused {
+    -fx-border-color: #3d7bd9;
+}
+
+.dialog-pane .button {
+    -fx-background-color: #232833;
+    -fx-text-fill: #d3d7de;
+    -fx-background-radius: 4;
+    -fx-padding: 6 14 6 14;
+}
+
+.dialog-pane .button:hover {
+    -fx-background-color: #2d333f;
+}
+
+.dialog-pane .button:default {
+    -fx-background-color: #2ea043;
+    -fx-text-fill: white;
+}
+
+.dialog-pane .button:default:hover {
+    -fx-background-color: #35b94c;
 }

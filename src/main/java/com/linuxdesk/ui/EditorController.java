@@ -40,6 +40,7 @@ public class EditorController {
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                     "You have unsaved changes to " + path + ". Discard them?",
                     ButtonType.YES, ButtonType.NO);
+            ThemeManager.apply(confirm.getDialogPane());
             confirm.setHeaderText(null);
             confirm.showAndWait().ifPresent(button -> {
                 if (button == ButtonType.YES) {

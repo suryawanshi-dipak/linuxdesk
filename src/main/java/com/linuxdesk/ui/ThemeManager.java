@@ -1,6 +1,7 @@
 package com.linuxdesk.ui;
 
 import javafx.scene.Scene;
+import javafx.scene.control.DialogPane;
 
 import java.util.prefs.Preferences;
 
@@ -28,13 +29,21 @@ public final class ThemeManager {
     }
 
     public static void apply(Scene scene) {
-        scene.getStylesheets().setAll(ThemeManager.class.getResource(current.stylesheetPath).toExternalForm());
+        scene.getStylesheets().setAll(stylesheetUrl());
+    }
+
+    public static void apply(DialogPane dialogPane) {
+        dialogPane.getStylesheets().setAll(stylesheetUrl());
     }
 
     public static void toggle(Scene scene) {
         current = (current == Theme.DARK) ? Theme.LIGHT : Theme.DARK;
         prefs().put(PREF_KEY, current.name());
         apply(scene);
+    }
+
+    private static String stylesheetUrl() {
+        return ThemeManager.class.getResource(current.stylesheetPath).toExternalForm();
     }
 
     private static Theme loadSavedTheme() {
