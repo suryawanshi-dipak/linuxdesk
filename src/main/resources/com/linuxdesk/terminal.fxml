@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+
+<BorderPane styleClass="terminal-root" xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml" fx:controller="com.linuxdesk.ui.TerminalController">
+    <center>
+        <TextArea fx:id="outputArea" editable="false" wrapText="true" styleClass="terminal-output"/>
+    </center>
+    <bottom>
+        <TextField fx:id="commandField" promptText="Type a command and press Enter..." styleClass="terminal-input">
+            <BorderPane.margin>
+                <Insets top="0" right="10" bottom="10" left="10"/>
+            </BorderPane.margin>
+        </TextField>
+    </bottom>
+</BorderPane>

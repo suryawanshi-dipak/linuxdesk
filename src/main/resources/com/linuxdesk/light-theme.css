@@ -215,3 +215,38 @@
     -fx-font-size: 13px;
     -fx-text-fill: #1a1d24;
 }
+
+/* ---------- Terminal ---------- */
+
+.terminal-root {
+    -fx-background-color: #1a1d24;
+}
+
+.terminal-output {
+    -fx-background-color: #1a1d24;
+}
+
+.terminal-output .content {
+    -fx-background-color: #1a1d24;
+}
+
+.terminal-output, .terminal-output .text-area {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-text-fill: #4fd67a;
+}
+
+.terminal-input {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1a1d24;
+    -fx-prompt-text-fill: #9aa0ab;
+    -fx-border-color: #d7dae0;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 8 10 8 10;
+    -fx-font-family: "Consolas", monospace;
+}
+
+.terminal-input:focused {
+    -fx-border-color: #3d7bd9;
+}

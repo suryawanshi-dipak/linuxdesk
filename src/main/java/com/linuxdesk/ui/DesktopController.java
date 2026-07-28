@@ -10,9 +10,14 @@ import javafx.fxml.FXMLLoader;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.StackPane;
@@ -37,6 +42,19 @@ public class DesktopController {
     private SshSessionManager sessionManager;
     private final Deque<String> history = new ArrayDeque<>();
     private String currentPath;
+    private RemoteEntry clipboardEntry;
+
+    @FXML
+    private void initialize() {
+        iconGrid.setOnContextMenuRequested(event -> {
+            ContextMenu menu = new ContextMenu();
+            MenuItem pasteItem = new MenuItem("Paste");
+            pasteItem.setDisable(clipboardEntry == null);
+            pasteItem.setOnAction(e -> pasteClipboard());
+            menu.getItems().add(pasteItem);
+            menu.show(iconGrid, event.getScreenX(), event.getScreenY());
+        });
+    }
 
     public void init(SshSessionManager sessionManager, ConnectionProfile profile, String rootPath) {
         this.sessionManager = sessionManager;
@@ -51,6 +69,28 @@ public class DesktopController {
             String previous = history.pop();
             navigateTo(previous, false);
             backButton.setDisable(history.isEmpty());
+        }
+    }
+
+    @FXML
+    private void onOpenTerminal() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/terminal.fxml"));
+            Parent root = loader.load();
+
+            Scene scene = new Scene(root, 760, 480);
+            ThemeManager.apply(scene);
+
+            Stage terminalStage = new Stage();
+            terminalStage.initOwner(iconGrid.getScene().getWindow());
+            terminalStage.setScene(scene);
+
+            TerminalController controller = loader.getController();
+            controller.init(sessionManager, hostLabel.getText(), terminalStage);
+
+            terminalStage.show();
+        } catch (Exception e) {
+            statusLabel.setText("Failed to open terminal: " + e.getMessage());
         }
     }
 
@@ -121,7 +161,135 @@ public class DesktopController {
             }
         });
 
+        box.setOnContextMenuRequested(event -> {
+            createEntryContextMenu(entry).show(box, event.getScreenX(), event.getScreenY());
+            event.consume();
+        });
+
         return box;
+    }
+
+    private ContextMenu createEntryContextMenu(RemoteEntry entry) {
+        ContextMenu menu = new ContextMenu();
+
+        MenuItem copyItem = new MenuItem("Copy");
+        copyItem.setOnAction(e -> {
+            clipboardEntry = entry;
+            statusLabel.setText("Copied " + entry.name());
+        });
+
+        MenuItem pasteItem = new MenuItem("Paste");
+        pasteItem.setDisable(clipboardEntry == null);
+        pasteItem.setOnAction(e -> pasteClipboard());
+
+        MenuItem renameItem = new MenuItem("Rename");
+        renameItem.setOnAction(e -> renameEntry(entry));
+
+        MenuItem deleteItem = new MenuItem("Delete");
+        deleteItem.setOnAction(e -> deleteEntry(entry));
+
+        menu.getItems().addAll(copyItem, pasteItem, renameItem, deleteItem);
+        return menu;
+    }
+
+    private void pasteClipboard() {
+        if (clipboardEntry == null) {
+            return;
+        }
+        RemoteEntry source = clipboardEntry;
+        String targetDir = currentPath;
+        statusLabel.setText("Pasting " + source.name() + "...");
+
+        Thread worker = new Thread(() -> {
+            try {
+                String destPath = buildPastePath(source, targetDir);
+                sessionManager.copy(source, destPath);
+                Platform.runLater(() -> navigateTo(currentPath, false));
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Paste failed: " + e.getMessage()));
+            }
+        }, "sftp-copy");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private String buildPastePath(RemoteEntry source, String targetDir) {
+        String base = targetDir.endsWith("/") ? targetDir + source.name() : targetDir + "/" + source.name();
+        if (!sessionManager.exists(base)) {
+            return base;
+        }
+        String stem = source.name();
+        String ext = "";
+        int dot = stem.lastIndexOf('.');
+        if (!source.directory() && dot > 0) {
+            ext = stem.substring(dot);
+            stem = stem.substring(0, dot);
+        }
+        int counter = 1;
+        String candidate;
+        do {
+            String suffix = counter == 1 ? " (copy)" : " (copy " + counter + ")";
+            String candidateName = stem + suffix + ext;
+            candidate = targetDir.endsWith("/") ? targetDir + candidateName : targetDir + "/" + candidateName;
+            counter++;
+        } while (sessionManager.exists(candidate));
+        return candidate;
+    }
+
+    private void renameEntry(RemoteEntry entry) {
+        TextInputDialog dialog = new TextInputDialog(entry.name());
+        dialog.setHeaderText(null);
+        dialog.setTitle("Rename");
+        dialog.setContentText("New name:");
+        dialog.showAndWait().ifPresent(newName -> {
+            String trimmed = newName.trim();
+            if (trimmed.isEmpty() || trimmed.equals(entry.name())) {
+                return;
+            }
+            String parent = currentPath;
+            String newPath = parent.endsWith("/") ? parent + trimmed : parent + "/" + trimmed;
+            statusLabel.setText("Renaming " + entry.name() + "...");
+
+            Thread worker = new Thread(() -> {
+                try {
+                    sessionManager.rename(entry.path(), newPath);
+                    Platform.runLater(() -> navigateTo(currentPath, false));
+                } catch (Exception e) {
+                    Platform.runLater(() -> statusLabel.setText("Rename failed: " + e.getMessage()));
+                }
+            }, "sftp-rename");
+            worker.setDaemon(true);
+            worker.start();
+        });
+    }
+
+    private void deleteEntry(RemoteEntry entry) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete " + entry.name() + "? This cannot be undone.",
+                ButtonType.YES, ButtonType.NO);
+        confirm.setHeaderText(null);
+        confirm.showAndWait().ifPresent(button -> {
+            if (button != ButtonType.YES) {
+                return;
+            }
+            statusLabel.setText("Deleting " + entry.name() + "...");
+
+            Thread worker = new Thread(() -> {
+                try {
+                    sessionManager.delete(entry);
+                    Platform.runLater(() -> {
+                        if (entry.equals(clipboardEntry)) {
+                            clipboardEntry = null;
+                        }
+                        navigateTo(currentPath, false);
+                    });
+                } catch (Exception e) {
+                    Platform.runLater(() -> statusLabel.setText("Delete failed: " + e.getMessage()));
+                }
+            }, "sftp-delete");
+            worker.setDaemon(true);
+            worker.start();
+        });
     }
 
     private void openFileEditor(RemoteEntry entry) {

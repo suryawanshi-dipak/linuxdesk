@@ -21,6 +21,7 @@
             <Label fx:id="pathLabel" styleClass="path-label"/>
             <Region HBox.hgrow="ALWAYS"/>
             <Label fx:id="statusLabel" styleClass="status-label"/>
+            <Button text="Terminal" onAction="#onOpenTerminal" styleClass="secondary-button"/>
             <Button text="Disconnect" onAction="#onDisconnect" styleClass="secondary-button"/>
         </HBox>
     </top>

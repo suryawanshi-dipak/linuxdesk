@@ -1,6 +1,7 @@
 package com.linuxdesk.ssh;
 
 import org.apache.sshd.client.SshClient;
+import org.apache.sshd.client.channel.ChannelShell;
 import org.apache.sshd.client.keyverifier.AcceptAllServerKeyVerifier;
 import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.common.config.keys.FilePasswordProvider;
@@ -93,6 +94,88 @@ public class SshSessionManager implements AutoCloseable {
                 EnumSet.of(SftpClient.OpenMode.Create, SftpClient.OpenMode.Write, SftpClient.OpenMode.Truncate))) {
             out.write(content.getBytes(StandardCharsets.UTF_8));
         }
+    }
+
+    public boolean exists(String path) {
+        try {
+            sftpClient.stat(path);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    public void rename(String oldPath, String newPath) throws IOException {
+        sftpClient.rename(oldPath, newPath);
+    }
+
+    public void delete(RemoteEntry entry) throws IOException {
+        if (entry.directory()) {
+            deleteDirectoryRecursive(entry.path());
+        } else {
+            sftpClient.remove(entry.path());
+        }
+    }
+
+    private void deleteDirectoryRecursive(String path) throws IOException {
+        for (SftpClient.DirEntry dirEntry : sftpClient.readDir(path)) {
+            String name = dirEntry.getFilename();
+            if (name.equals(".") || name.equals("..")) {
+                continue;
+            }
+            String childPath = path.endsWith("/") ? path + name : path + "/" + name;
+            if (dirEntry.getAttributes().isDirectory()) {
+                deleteDirectoryRecursive(childPath);
+            } else {
+                sftpClient.remove(childPath);
+            }
+        }
+        sftpClient.rmdir(path);
+    }
+
+    /** Copies a file or directory tree. SFTP has no server-side copy, so this streams the bytes through the client. */
+    public void copy(RemoteEntry entry, String destPath) throws IOException {
+        if (entry.directory()) {
+            copyDirectory(entry.path(), destPath);
+        } else {
+            copyFile(entry.path(), destPath);
+        }
+    }
+
+    private void copyDirectory(String srcPath, String destPath) throws IOException {
+        sftpClient.mkdir(destPath);
+        for (SftpClient.DirEntry dirEntry : sftpClient.readDir(srcPath)) {
+            String name = dirEntry.getFilename();
+            if (name.equals(".") || name.equals("..")) {
+                continue;
+            }
+            String childSrc = srcPath.endsWith("/") ? srcPath + name : srcPath + "/" + name;
+            String childDest = destPath.endsWith("/") ? destPath + name : destPath + "/" + name;
+            if (dirEntry.getAttributes().isDirectory()) {
+                copyDirectory(childSrc, childDest);
+            } else {
+                copyFile(childSrc, childDest);
+            }
+        }
+    }
+
+    private void copyFile(String srcPath, String destPath) throws IOException {
+        try (InputStream in = sftpClient.read(srcPath, EnumSet.of(SftpClient.OpenMode.Read));
+             OutputStream out = sftpClient.write(destPath,
+                     EnumSet.of(SftpClient.OpenMode.Create, SftpClient.OpenMode.Write, SftpClient.OpenMode.Truncate))) {
+            in.transferTo(out);
+        }
+    }
+
+    /** Opens an interactive PTY shell channel for the terminal window. */
+    public TerminalSession openTerminal() throws IOException {
+        ChannelShell channel = session.createShellChannel();
+        channel.setPtyType("xterm-256color");
+        channel.setPtyColumns(120);
+        channel.setPtyLines(40);
+        channel.setEnv("TERM", "xterm-256color");
+        channel.open().verify(15, TimeUnit.SECONDS);
+        return new TerminalSession(channel);
     }
 
     public boolean isConnected() {
