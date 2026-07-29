@@ -23,11 +23,11 @@ public class App extends Application {
         primaryStage = stage;
         stage.initStyle(StageStyle.UNDECORATED);
         stage.setTitle("LinuxDesk");
-        loadScene("/com/linuxdesk/login.fxml", 760, 356);
+        loadScene("/com/linuxdesk/login.fxml", 1040, 420);
         stage.show();
         stage.setMaximized(false);
-        stage.setWidth(760);
-        stage.setHeight(356 + TITLE_BAR_HEIGHT);
+        stage.setWidth(1040);
+        stage.setHeight(420 + TITLE_BAR_HEIGHT);
         stage.centerOnScreen();
     }
 

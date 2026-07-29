@@ -2,6 +2,7 @@ package com.linuxdesk.ui;
 
 import com.linuxdesk.App;
 import com.linuxdesk.model.ConnectionProfile;
+import com.linuxdesk.profile.RecentPathsStore;
 import com.linuxdesk.ssh.ArchiveFormat;
 import com.linuxdesk.ssh.RemoteEntry;
 import com.linuxdesk.ssh.SshSessionManager;
@@ -55,6 +56,7 @@ public class DesktopController {
     private static final long MAX_EDITABLE_SIZE = 2 * 1024 * 1024;
 
     @FXML private Label hostLabel;
+    @FXML private Label productionBadge;
     @FXML private Label pathLabel;
     @FXML private Button backButton;
     @FXML private FlowPane iconGrid;
@@ -66,6 +68,9 @@ public class DesktopController {
     private enum SortMode { NAME, SIZE }
 
     private SshSessionManager sessionManager;
+    private boolean production;
+    private String hostKey;
+    private final RecentPathsStore recentPathsStore = new RecentPathsStore();
     private final Deque<String> history = new ArrayDeque<>();
     private String currentPath;
     private RemoteEntry clipboardEntry;
@@ -88,7 +93,18 @@ public class DesktopController {
 
         startButton.setOnAction(e -> toggleStartMenu());
 
-        searchField.textProperty().addListener((obs, old, text) -> updateSearchResults(text));
+        searchField.textProperty().addListener((obs, old, text) -> {
+            if (text == null || text.isBlank()) {
+                lastMatches = List.of();
+                if (searchField.isFocused()) {
+                    showRecentItemsDropdown();
+                } else {
+                    hideSearchResults();
+                }
+            } else {
+                updateSearchResults(text);
+            }
+        });
         searchField.setOnAction(e -> openTopMatch());
         searchField.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.ESCAPE) {
@@ -97,8 +113,12 @@ public class DesktopController {
             }
         });
         searchField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-            if (isFocused && !searchField.getText().isBlank()) {
-                updateSearchResults(searchField.getText());
+            if (isFocused) {
+                if (searchField.getText().isBlank()) {
+                    showRecentItemsDropdown();
+                } else {
+                    updateSearchResults(searchField.getText());
+                }
             }
         });
 
@@ -168,6 +188,40 @@ public class DesktopController {
     }
 
     private void showSearchResults(List<SearchHit> hits) {
+        renderResultsPopup(hits, "No matching items in this folder", null);
+    }
+
+    /** Shown when the search field is focused but empty: recently visited folders/files for this host. */
+    private void showRecentItemsDropdown() {
+        List<SearchHit> hits = new ArrayList<>();
+        for (String dir : recentPathsStore.loadDirectories(hostKey)) {
+            hits.add(new SearchHit(dir, HitKind.FOLDER, () -> navigateTo(dir, true)));
+        }
+        for (String file : recentPathsStore.loadFiles(hostKey)) {
+            int lastSlash = file.lastIndexOf('/');
+            String label = lastSlash >= 0 && lastSlash < file.length() - 1 ? file.substring(lastSlash + 1) : file;
+            hits.add(new SearchHit(label, HitKind.FILE, () -> openRecentFile(file)));
+        }
+        lastMatches = hits;
+        renderResultsPopup(hits, "No recent folders or files yet on this host",
+                hits.isEmpty() ? null : () -> recentPathsStore.clear(hostKey));
+    }
+
+    private void openRecentFile(String path) {
+        statusLabel.setText("Opening " + path + "...");
+        Thread worker = new Thread(() -> {
+            try {
+                RemoteEntry entry = sessionManager.statEntry(path);
+                Platform.runLater(() -> openFileEditor(entry));
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Failed to open " + path + ": " + e.getMessage()));
+            }
+        }, "sftp-stat");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void renderResultsPopup(List<SearchHit> hits, String emptyMessage, Runnable onClearAll) {
         hideSearchResults();
 
         VBox card = new VBox(2);
@@ -176,7 +230,7 @@ public class DesktopController {
         ThemeManager.apply(card);
 
         if (hits.isEmpty()) {
-            Label empty = new Label("No matching items in this folder");
+            Label empty = new Label(emptyMessage);
             empty.getStyleClass().add("search-empty-label");
             card.getChildren().add(empty);
         } else {
@@ -187,6 +241,18 @@ public class DesktopController {
                 }
                 card.getChildren().add(createSearchResultRow(hit));
                 previousKind = hit.kind();
+            }
+            if (onClearAll != null) {
+                card.getChildren().add(new Separator());
+                Label clearLabel = new Label("Clear recent items");
+                HBox clearRow = new HBox(clearLabel);
+                clearRow.setAlignment(Pos.CENTER_LEFT);
+                clearRow.getStyleClass().add("search-result-row");
+                clearRow.setOnMouseClicked(event -> {
+                    onClearAll.run();
+                    hideSearchResults();
+                });
+                card.getChildren().add(clearRow);
             }
         }
 
@@ -527,7 +593,11 @@ public class DesktopController {
 
     public void init(SshSessionManager sessionManager, ConnectionProfile profile, String rootPath) {
         this.sessionManager = sessionManager;
-        hostLabel.setText(profile.getUsername() + "@" + profile.getHost());
+        this.production = profile.isProduction();
+        this.hostKey = profile.getUsername() + "@" + profile.getHost();
+        hostLabel.setText(hostKey);
+        productionBadge.setVisible(production);
+        productionBadge.setManaged(production);
         backButton.setDisable(true);
         navigateTo(rootPath, false);
     }
@@ -632,7 +702,7 @@ public class DesktopController {
     private void onDisconnect() {
         sessionManager.close();
         try {
-            App.loadScene("/com/linuxdesk/login.fxml", 760, 430);
+            App.loadScene("/com/linuxdesk/login.fxml", 1040, 420);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to return to login screen", e);
         }
@@ -657,6 +727,7 @@ public class DesktopController {
         Thread worker = new Thread(() -> {
             try {
                 List<RemoteEntry> entries = sessionManager.listDirectory(path);
+                recentPathsStore.recordDirectory(hostKey, path);
                 Platform.runLater(() -> renderEntries(entries));
             } catch (Exception e) {
                 Platform.runLater(() -> statusLabel.setText("Failed to list directory: " + e.getMessage()));
@@ -1050,33 +1121,58 @@ public class DesktopController {
     }
 
     private void deleteEntry(RemoteEntry entry) {
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                "Delete " + entry.name() + "? This cannot be undone.",
-                ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
-        confirm.setHeaderText(null);
-        confirm.showAndWait().ifPresent(button -> {
-            if (button != ButtonType.YES) {
-                return;
-            }
-            statusLabel.setText("Deleting " + entry.name() + "...");
-
-            Thread worker = new Thread(() -> {
-                try {
-                    sessionManager.delete(entry);
-                    Platform.runLater(() -> {
-                        if (entry.equals(clipboardEntry)) {
-                            clipboardEntry = null;
-                        }
-                        navigateTo(currentPath, false);
-                    });
-                } catch (Exception e) {
-                    Platform.runLater(() -> statusLabel.setText("Delete failed: " + e.getMessage()));
+        if (production && entry.directory()) {
+            confirmProductionDelete(entry);
+        } else {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                    "Delete " + entry.name() + "? This cannot be undone.",
+                    ButtonType.YES, ButtonType.NO);
+            ThemeManager.apply(confirm.getDialogPane());
+            confirm.setHeaderText(null);
+            confirm.showAndWait().ifPresent(button -> {
+                if (button == ButtonType.YES) {
+                    performDelete(entry);
                 }
-            }, "sftp-delete");
-            worker.setDaemon(true);
-            worker.start();
+            });
+        }
+    }
+
+    /** Production-tagged profiles require typing the folder name for a recursive delete, not just a click-through. */
+    private void confirmProductionDelete(RemoteEntry entry) {
+        TextInputDialog dialog = new TextInputDialog();
+        ThemeManager.apply(dialog.getDialogPane());
+        dialog.setHeaderText(null);
+        dialog.setTitle("Confirm delete on production host");
+        dialog.setContentText("This is a PRODUCTION host. Deleting \"" + entry.name()
+                + "\" removes it and everything inside it, permanently.\n"
+                + "Type the folder name to confirm:");
+        dialog.showAndWait().ifPresent(typed -> {
+            if (typed.trim().equals(entry.name())) {
+                performDelete(entry);
+            } else {
+                statusLabel.setText("Confirmation text didn't match — delete cancelled.");
+            }
         });
+    }
+
+    private void performDelete(RemoteEntry entry) {
+        statusLabel.setText("Deleting " + entry.name() + "...");
+
+        Thread worker = new Thread(() -> {
+            try {
+                sessionManager.delete(entry);
+                Platform.runLater(() -> {
+                    if (entry.equals(clipboardEntry)) {
+                        clipboardEntry = null;
+                    }
+                    navigateTo(currentPath, false);
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Delete failed: " + e.getMessage()));
+            }
+        }, "sftp-delete");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     private void openFileEditor(RemoteEntry entry) {
@@ -1089,6 +1185,7 @@ public class DesktopController {
         Thread worker = new Thread(() -> {
             try {
                 String content = sessionManager.readFile(entry.path());
+                recentPathsStore.recordFile(hostKey, entry.path());
                 Platform.runLater(() -> showEditor(entry, content));
             } catch (Exception e) {
                 Platform.runLater(() -> statusLabel.setText("Failed to open file: " + e.getMessage()));

@@ -4,7 +4,7 @@ A native desktop SSH GUI and remote management workspace built for Linux system 
 
 ## Status
 
-Early v1 in active development. The login window, SSH/SFTP connection with host key verification, remote folder browser, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, and a system monitor dashboard are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
+Early v1 in active development. The login window with multi-profile management and connection history, SSH/SFTP connection with host key verification, remote folder browser with recent folders/files, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, and a system monitor dashboard are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
 
 ## Tech stack
 
@@ -16,11 +16,12 @@ Early v1 in active development. The login window, SSH/SFTP connection with host 
 ## What's implemented so far
 
 - **Login window** — Host/IP, port, username, private key file (with file browser), optional passphrase (never persisted), and a live preview of the equivalent `ssh` command.
-- **Saved connection profile** — host/port/username/key path persist to `~/.linuxdesk/profile.properties` between runs (passphrase is always excluded).
+- **Multi-profile management** — a sidebar lists every saved profile (colour dot + name + PROD badge), with an incremental search box and New/Duplicate/Delete actions. Each profile has a name, colour tag (6-swatch picker), and a Production flag, persisted to `~/.linuxdesk/profiles.properties` (passphrase always excluded); the last-used profile is reselected automatically on the next launch. An old single-profile `profile.properties` from before this feature is migrated in automatically as a "Default" profile the first time the app runs. A profile marked Production shows a red "PRODUCTION" badge in the desktop toolbar once connected, and recursive folder deletes on that connection require typing the folder's name to confirm instead of a plain Yes/No click.
+- **Connection history & recent items** — the login sidebar toggles between "Profiles" and "Recent": the latter lists the last 20 successful connections (deduped by host/port/username, newest first, relative timestamps like "2h ago"), where selecting one and clicking "Reconnect" fills the form and connects in one action; "Remove"/"Clear All" delete individual or all entries. Once connected, clearing the desktop search box (or focusing it while empty) shows up to 15 recently visited folders and 15 recently opened files *for that host*, one click to jump back in, with a "Clear recent items" option — all persisted to `~/.linuxdesk/history.properties` and `~/.linuxdesk/recent.properties`.
 - **SSH/SFTP connection** — key-based authentication via Apache MINA SSHD, run off the UI thread so the window never freezes while connecting.
 - **Host key verification** — trust-on-first-use against a per-user known_hosts store (`~/.linuxdesk/known_hosts`, standard OpenSSH format). First connection to a host shows its SHA-256/MD5 fingerprint and requires explicit "Trust and Connect"; if a previously-trusted host later presents a *different* key, the connection is blocked behind a distinct, harder-to-dismiss warning dialog (default button is Cancel, and the "trust anyway" button stays disabled until you tick a box confirming the change is expected) rather than a routine "click OK" prompt.
 - **Remote folder browser** — after a successful connection, the user's home directory opens as a desktop-style icon grid (folders/files as icons, double-click to navigate into a folder, Back button, breadcrumb path).
-- **Windows-style taskbar** — a bottom taskbar with a "LinuxDesk" Start button that opens a popup panel (Task Manager, Terminal, Disconnect) anchored above it, plus a compact (220px) Windows-search-style field: typing shows a live dropdown of matches — app commands (Task Manager/Terminal/Disconnect) first, then files/folders in the current directory (icon + name, capped at 20), separated visually — without touching the icon grid behind it. Click a result or press Enter (opens the top match) to run/open it, Escape or clicking away dismisses the dropdown, and it reopens on refocus if there's still a query.
+- **Windows-style taskbar** — a bottom taskbar with a "LinuxDesk" Start button that opens a popup panel (Task Manager, Terminal, Disconnect) anchored above it, plus a compact (220px) Windows-search-style field: typing shows a live dropdown of matches — app commands (Task Manager/Terminal/Disconnect) first, then files/folders in the current directory (icon + name, capped at 20), separated visually — without touching the icon grid behind it. Click a result or press Enter (opens the top match) to run/open it, Escape or clicking away dismisses the dropdown, and it reopens on refocus if there's still a query. Focusing the field while it's empty shows recently visited folders/files for this host instead (see Connection history & recent items below).
 - **File editor** — double-click a remote text file (up to 2 MB) to open it in a RichTextFX-based code editor with line numbers, save-back-over-SFTP, and:
   - **Syntax highlighting** — comments/strings/numbers highlighted generically across file types, plus a keyword set for `.java`, `.py`, `.js`/`.ts`, and shell scripts (`.sh`/`.bash`/`.bashrc`/`.profile`). Recomputed 150ms after you stop typing, not on every keystroke.
   - **Find/Replace** — Ctrl+F opens a bar with Find/Previous/Next, a live match count, Replace/Replace All, and a case-sensitivity toggle; Escape closes it.
@@ -42,7 +43,8 @@ Early v1 in active development. The login window, SSH/SFTP connection with host 
 
 - Host key verification uses LinuxDesk's own known_hosts store, not `~/.ssh/known_hosts` — it won't see hosts you've already trusted via OpenSSH/PuTTY (and vice versa), and there's no UI yet to view/remove stored entries (`FR-CON-043–044`) or an org-wide strict mode (`FR-CON-045`).
 - No window edge-resizing yet (undecorated window can still be maximized/minimized/moved, just not resized by dragging an edge).
-- Single saved profile only — no multi-profile management UI yet.
+- Profiles are a flat list — no nested folders/groups, free-form tags, or a health/reachability indicator (`FR-CON-052–053, 060`). No import from PuTTY/WinSCP/`~/.ssh/config`/Termius, no encrypted export (`FR-CON-057–058`). The Production flag only gates recursive folder deletes; it doesn't (yet) extend to service stop/restart or package removal, and there's no title-bar-wide red tint — just a toolbar badge.
+- No explicit bookmarks (`FR-CON-070–071`) — recent folders cover the common case for a single-user tool, but there's no way to pin a directory you don't happen to have visited recently. Connection history doesn't track session duration or disconnect reason (`FR-CON-072`), just host/port/username/timestamp. Recent folders/files can only be cleared all-at-once per host, not removed one at a time (connection history *does* support single-item removal).
 - SFTP has no server-side copy command, so Paste streams file bytes through the client; large files/directories will be slower than a native `cp` on the server.
 - Upload/Download has no progress bar, pause/resume, or parallel streams — it's a single blocking transfer per file with only a status-bar message until it finishes.
 - The terminal is a simple line-based PTY console, not a full terminal emulator — full-screen interactive programs (vim, top, less) won't render correctly in it.
@@ -67,8 +69,11 @@ mvn javafx:run
 ```
 src/main/java/com/linuxdesk/
   App.java                    # JavaFX entry point, scene/theme/title-bar wiring
-  model/ConnectionProfile.java
-  profile/ProfileStore.java   # persists connection details (never the passphrase)
+  model/ConnectionProfile.java # name, colour tag, Production flag, connection fields
+  model/ConnectionHistoryEntry.java # one past connection: host/port/user/key path/timestamp
+  profile/ProfileStore.java   # persists the named profile list (never the passphrase), migrates the old single-profile store
+  profile/ConnectionHistoryStore.java # persists recent successful connections for the login screen's Recent tab
+  profile/RecentPathsStore.java # persists recently visited folders/opened files, per host
   ssh/SshSessionManager.java  # SSH + SFTP session handling (Apache MINA SSHD)
   ssh/HostKeyPrompt.java      # callback for TOFU/host-key-changed decisions, implemented by LoginController
   ssh/RemoteEntry.java

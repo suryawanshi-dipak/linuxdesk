@@ -2,9 +2,12 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Priority?>
@@ -14,57 +17,97 @@
 <BorderPane styleClass="login-root" xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml" fx:controller="com.linuxdesk.ui.LoginController">
     <center>
-        <VBox spacing="20" styleClass="login-card" BorderPane.alignment="CENTER"
-              prefWidth="780" maxWidth="-Infinity" maxHeight="-Infinity">
+        <HBox spacing="20" alignment="CENTER" BorderPane.alignment="CENTER"
+              maxWidth="-Infinity" maxHeight="-Infinity">
             <padding>
-                <Insets top="28" right="34" bottom="26" left="34"/>
+                <Insets top="28" right="34" bottom="28" left="34"/>
             </padding>
 
-            <Label text="Connect to VM" styleClass="login-title"/>
+            <VBox spacing="10" styleClass="profile-sidebar" prefWidth="230" minWidth="230" maxWidth="230">
+                <HBox spacing="0" styleClass="sidebar-toggle-row">
+                    <ToggleButton fx:id="profilesToggle" text="Profiles" selected="true"
+                                  styleClass="sidebar-toggle-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    <ToggleButton fx:id="recentToggle" text="Recent"
+                                  styleClass="sidebar-toggle-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                </HBox>
+                <TextField fx:id="profileSearchField" promptText="Search..." styleClass="field-input"/>
+                <ListView fx:id="profileListView" styleClass="profile-list" VBox.vgrow="ALWAYS" prefHeight="280"/>
+                <HBox spacing="6">
+                    <Button fx:id="newProfileButton" text="New" onAction="#onPrimaryAction"
+                            styleClass="secondary-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    <Button fx:id="duplicateProfileButton" text="Duplicate" onAction="#onSecondaryAction"
+                            styleClass="secondary-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    <Button fx:id="deleteProfileButton" text="Delete" onAction="#onTertiaryAction"
+                            styleClass="secondary-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                </HBox>
+            </VBox>
 
-            <HBox spacing="20">
-                <VBox spacing="6" HBox.hgrow="ALWAYS">
-                    <Label text="Host / IP" styleClass="field-label"/>
-                    <TextField fx:id="hostField" promptText="203.0.113.10" styleClass="field-input"/>
-                </VBox>
-                <VBox spacing="6" prefWidth="90">
-                    <Label text="Port" styleClass="field-label"/>
-                    <TextField fx:id="portField" promptText="22" styleClass="field-input"/>
-                </VBox>
-                <VBox spacing="6" HBox.hgrow="ALWAYS">
-                    <Label text="Username" styleClass="field-label"/>
-                    <TextField fx:id="usernameField" promptText="ubuntu" styleClass="field-input"/>
-                </VBox>
-            </HBox>
+            <VBox spacing="18" styleClass="login-card" prefWidth="780" maxWidth="-Infinity" maxHeight="-Infinity">
+                <padding>
+                    <Insets top="28" right="34" bottom="26" left="34"/>
+                </padding>
 
-            <HBox spacing="20">
-                <VBox spacing="6" HBox.hgrow="ALWAYS">
-                    <Label text="Private key file" styleClass="field-label"/>
-                    <HBox spacing="8">
-                        <TextField fx:id="keyPathField" promptText="C:\Users\you\.ssh\id_ed25519"
-                                   styleClass="field-input" HBox.hgrow="ALWAYS"/>
-                        <Button fx:id="browseButton" text="Browse..." onAction="#onBrowseKey"
-                                styleClass="secondary-button"/>
-                    </HBox>
-                </VBox>
-                <VBox spacing="6" HBox.hgrow="ALWAYS">
-                    <Label text="Key passphrase (optional, never saved)" styleClass="field-label"/>
-                    <PasswordField fx:id="passphraseField" styleClass="field-input"/>
-                </VBox>
-            </HBox>
+                <Label text="Connect to VM" styleClass="login-title"/>
 
-            <HBox spacing="10" alignment="CENTER_LEFT">
-                <Label text="EQUIVALENT TO" styleClass="equivalent-tag"/>
-                <Label fx:id="commandPreviewLabel" styleClass="command-preview"/>
-                <Region HBox.hgrow="ALWAYS"/>
-                <Label fx:id="statusLabel" styleClass="status-label"/>
-            </HBox>
+                <HBox spacing="20" alignment="CENTER_LEFT">
+                    <VBox spacing="6" HBox.hgrow="ALWAYS">
+                        <Label text="Profile name" styleClass="field-label"/>
+                        <TextField fx:id="nameField" promptText="e.g. Staging API box" styleClass="field-input"/>
+                    </VBox>
+                    <VBox spacing="6">
+                        <Label text="Colour tag" styleClass="field-label"/>
+                        <HBox fx:id="colorSwatchRow" spacing="6" alignment="CENTER_LEFT"/>
+                    </VBox>
+                    <VBox spacing="6" alignment="CENTER_LEFT">
+                        <Label text=" " styleClass="field-label"/>
+                        <CheckBox fx:id="productionCheck" text="Production" styleClass="production-check"/>
+                    </VBox>
+                </HBox>
 
-            <HBox spacing="10" alignment="CENTER_RIGHT">
-                <Button text="Save profile" onAction="#onSaveProfile" styleClass="secondary-button"/>
-                <Button fx:id="testConnectionButton" text="Test connection" onAction="#onTestConnection"
-                        styleClass="primary-button"/>
-            </HBox>
-        </VBox>
+                <HBox spacing="20">
+                    <VBox spacing="6" HBox.hgrow="ALWAYS">
+                        <Label text="Host / IP" styleClass="field-label"/>
+                        <TextField fx:id="hostField" promptText="203.0.113.10" styleClass="field-input"/>
+                    </VBox>
+                    <VBox spacing="6" prefWidth="90">
+                        <Label text="Port" styleClass="field-label"/>
+                        <TextField fx:id="portField" promptText="22" styleClass="field-input"/>
+                    </VBox>
+                    <VBox spacing="6" HBox.hgrow="ALWAYS">
+                        <Label text="Username" styleClass="field-label"/>
+                        <TextField fx:id="usernameField" promptText="ubuntu" styleClass="field-input"/>
+                    </VBox>
+                </HBox>
+
+                <HBox spacing="20">
+                    <VBox spacing="6" HBox.hgrow="ALWAYS">
+                        <Label text="Private key file" styleClass="field-label"/>
+                        <HBox spacing="8">
+                            <TextField fx:id="keyPathField" promptText="C:\Users\you\.ssh\id_ed25519"
+                                       styleClass="field-input" HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="browseButton" text="Browse..." onAction="#onBrowseKey"
+                                    styleClass="secondary-button"/>
+                        </HBox>
+                    </VBox>
+                    <VBox spacing="6" HBox.hgrow="ALWAYS">
+                        <Label text="Key passphrase (optional, never saved)" styleClass="field-label"/>
+                        <PasswordField fx:id="passphraseField" styleClass="field-input"/>
+                    </VBox>
+                </HBox>
+
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="EQUIVALENT TO" styleClass="equivalent-tag"/>
+                    <Label fx:id="commandPreviewLabel" styleClass="command-preview"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="statusLabel" styleClass="status-label"/>
+                </HBox>
+
+                <HBox spacing="10" alignment="CENTER_RIGHT">
+                    <Button text="Save profile" onAction="#onSaveProfile" styleClass="secondary-button"/>
+                    <Button fx:id="testConnectionButton" text="Test connection" onAction="#onTestConnection"
+                            styleClass="primary-button"/>
+                </HBox>
+            </VBox>
+        </HBox>
     </center>
 </BorderPane>

@@ -150,6 +150,14 @@ public class SshSessionManager implements AutoCloseable {
         }
     }
 
+    /** Resolves a bare remote path (e.g. from the Recent Files list) back into a RemoteEntry. */
+    public RemoteEntry statEntry(String path) throws IOException {
+        SftpClient.Attributes attrs = sftpClient.stat(path);
+        int lastSlash = path.lastIndexOf('/');
+        String name = lastSlash >= 0 && lastSlash < path.length() - 1 ? path.substring(lastSlash + 1) : path;
+        return new RemoteEntry(name, path, attrs.isDirectory(), attrs.getSize());
+    }
+
     public boolean exists(String path) {
         try {
             sftpClient.stat(path);

@@ -1,30 +1,65 @@
 package com.linuxdesk.ui;
 
 import com.linuxdesk.App;
+import com.linuxdesk.model.ConnectionHistoryEntry;
 import com.linuxdesk.model.ConnectionProfile;
+import com.linuxdesk.profile.ConnectionHistoryStore;
 import com.linuxdesk.profile.ProfileStore;
 import com.linuxdesk.ssh.HostKeyPrompt;
 import com.linuxdesk.ssh.SshSessionManager;
 import javafx.application.Platform;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
 
 import java.io.File;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 public class LoginController {
 
+    private static final String[] COLOR_PALETTE = {
+            ConnectionProfile.DEFAULT_COLOR, // gray / no tag
+            "#3d7bd9", // blue
+            "#2ea043", // green
+            "#9b59b6", // purple
+            "#e5a13d", // orange
+            "#e5657a", // red
+    };
+
+    @FXML private ToggleButton profilesToggle;
+    @FXML private ToggleButton recentToggle;
+    @FXML private TextField profileSearchField;
+    @FXML private ListView<Object> profileListView;
+    @FXML private Button newProfileButton;
+    @FXML private Button duplicateProfileButton;
+    @FXML private Button deleteProfileButton;
+
+    @FXML private TextField nameField;
+    @FXML private HBox colorSwatchRow;
+    @FXML private CheckBox productionCheck;
     @FXML private TextField hostField;
     @FXML private TextField portField;
     @FXML private TextField usernameField;
@@ -36,19 +71,337 @@ public class LoginController {
     @FXML private Button browseButton;
 
     private final ProfileStore profileStore = new ProfileStore();
+    private final ConnectionHistoryStore historyStore = new ConnectionHistoryStore();
+    private final ObservableList<ConnectionProfile> profiles = FXCollections.observableArrayList();
+    private final ObservableList<ConnectionHistoryEntry> historyEntries = FXCollections.observableArrayList();
+    private FilteredList<ConnectionProfile> filteredProfiles;
+    private FilteredList<ConnectionHistoryEntry> filteredHistory;
+    private final ToggleGroup colorToggleGroup = new ToggleGroup();
+
+    /** Id of the profile currently loaded into the form; null while editing an unsaved new profile. */
+    private String editingProfileId;
+    private String selectedColor = ConnectionProfile.DEFAULT_COLOR;
+    private boolean suppressSelectionEvents;
+    private boolean showingRecent;
 
     @FXML
     private void initialize() {
-        ConnectionProfile saved = profileStore.load();
-        hostField.setText(saved.getHost());
-        portField.setText(String.valueOf(saved.getPort()));
-        usernameField.setText(saved.getUsername());
-        keyPathField.setText(saved.getPrivateKeyPath());
+        buildColorSwatches();
+        setupModeToggle();
+        setupProfileList();
 
         for (TextField field : new TextField[]{hostField, portField, usernameField, keyPathField}) {
             field.textProperty().addListener((obs, oldVal, newVal) -> updateCommandPreview());
         }
+
+        profiles.setAll(profileStore.loadAll());
+        historyEntries.setAll(historyStore.loadAll());
+
+        String lastUsedId = profileStore.loadLastUsedId();
+        ConnectionProfile initial = profiles.stream()
+                .filter(p -> p.getId().equals(lastUsedId))
+                .findFirst()
+                .orElse(profiles.isEmpty() ? null : profiles.get(0));
+        if (initial != null) {
+            profileListView.getSelectionModel().select(initial);
+        } else {
+            onNewProfile();
+        }
+
         updateCommandPreview();
+    }
+
+    private void buildColorSwatches() {
+        for (String hex : COLOR_PALETTE) {
+            ToggleButton swatch = new ToggleButton();
+            swatch.getStyleClass().add("color-swatch");
+            swatch.setStyle("-fx-background-color: " + hex + ";");
+            swatch.setUserData(hex);
+            swatch.setToggleGroup(colorToggleGroup);
+            colorSwatchRow.getChildren().add(swatch);
+        }
+        colorToggleGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
+            if (newToggle == null) {
+                colorToggleGroup.selectToggle(oldToggle);
+            } else {
+                selectedColor = (String) newToggle.getUserData();
+            }
+        });
+        colorToggleGroup.selectToggle((ToggleButton) colorSwatchRow.getChildren().get(0));
+    }
+
+    private void setSelectedColorTag(String hex) {
+        String resolved = (hex == null || hex.isBlank()) ? ConnectionProfile.DEFAULT_COLOR : hex;
+        selectedColor = resolved;
+        for (var node : colorSwatchRow.getChildren()) {
+            ToggleButton swatch = (ToggleButton) node;
+            if (resolved.equals(swatch.getUserData())) {
+                colorToggleGroup.selectToggle(swatch);
+                return;
+            }
+        }
+        colorToggleGroup.selectToggle(null);
+    }
+
+    private void setupModeToggle() {
+        ToggleGroup viewGroup = new ToggleGroup();
+        profilesToggle.setToggleGroup(viewGroup);
+        recentToggle.setToggleGroup(viewGroup);
+        viewGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
+            if (newToggle == null) {
+                viewGroup.selectToggle(oldToggle);
+                return;
+            }
+            showingRecent = newToggle == recentToggle;
+            profileSearchField.clear();
+            profileSearchField.setPromptText(showingRecent ? "Search recent..." : "Search profiles...");
+            setListItems(showingRecent ? filteredHistory : filteredProfiles);
+            newProfileButton.setText(showingRecent ? "Reconnect" : "New");
+            duplicateProfileButton.setText(showingRecent ? "Remove" : "Duplicate");
+            deleteProfileButton.setText(showingRecent ? "Clear All" : "Delete");
+            refreshButtonStates();
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private void setListItems(ObservableList<?> items) {
+        profileListView.setItems((ObservableList<Object>) items);
+    }
+
+    private void setupProfileList() {
+        filteredProfiles = new FilteredList<>(profiles, p -> true);
+        filteredHistory = new FilteredList<>(historyEntries, h -> true);
+        setListItems(filteredProfiles);
+
+        profileListView.setCellFactory(list -> new ListCell<>() {
+            @Override
+            protected void updateItem(Object item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                    return;
+                }
+                if (item instanceof ConnectionProfile profile) {
+                    setGraphic(buildProfileRow(profile));
+                } else if (item instanceof ConnectionHistoryEntry entry) {
+                    setGraphic(buildHistoryRow(entry));
+                }
+                setText(null);
+            }
+        });
+
+        profileSearchField.textProperty().addListener((obs, oldVal, text) -> {
+            String needle = text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
+            filteredProfiles.setPredicate(p -> needle.isEmpty()
+                    || p.displayName().toLowerCase(Locale.ROOT).contains(needle)
+                    || p.getHost().toLowerCase(Locale.ROOT).contains(needle)
+                    || p.getUsername().toLowerCase(Locale.ROOT).contains(needle));
+            filteredHistory.setPredicate(h -> needle.isEmpty()
+                    || h.displayLabel().toLowerCase(Locale.ROOT).contains(needle)
+                    || h.host().toLowerCase(Locale.ROOT).contains(needle)
+                    || h.username().toLowerCase(Locale.ROOT).contains(needle));
+        });
+
+        profileListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            refreshButtonStates();
+            if (suppressSelectionEvents || newVal == null) {
+                return;
+            }
+            if (newVal instanceof ConnectionProfile profile) {
+                loadProfileIntoForm(profile);
+            } else if (newVal instanceof ConnectionHistoryEntry entry) {
+                loadHistoryIntoForm(entry);
+            }
+        });
+
+        profiles.addListener((javafx.collections.ListChangeListener<ConnectionProfile>) c -> refreshButtonStates());
+        historyEntries.addListener((javafx.collections.ListChangeListener<ConnectionHistoryEntry>) c -> refreshButtonStates());
+    }
+
+    private void refreshButtonStates() {
+        Object selected = profileListView.getSelectionModel().getSelectedItem();
+        if (showingRecent) {
+            newProfileButton.setDisable(selected == null);
+            duplicateProfileButton.setDisable(selected == null);
+            deleteProfileButton.setDisable(historyEntries.isEmpty());
+        } else {
+            newProfileButton.setDisable(false);
+            duplicateProfileButton.setDisable(selected == null);
+            deleteProfileButton.setDisable(selected == null);
+        }
+    }
+
+    private HBox buildProfileRow(ConnectionProfile profile) {
+        Circle dot = new Circle(5, Color.web(
+                profile.getColorTag() == null || profile.getColorTag().isBlank()
+                        ? ConnectionProfile.DEFAULT_COLOR : profile.getColorTag()));
+        Label nameLabel = new Label(profile.displayName());
+        nameLabel.getStyleClass().add("profile-cell-name");
+        HBox row = new HBox(8, dot, nameLabel);
+        row.setAlignment(Pos.CENTER_LEFT);
+        if (profile.isProduction()) {
+            Label prodBadge = new Label("PROD");
+            prodBadge.getStyleClass().add("profile-prod-badge");
+            row.getChildren().add(prodBadge);
+        }
+        return row;
+    }
+
+    private HBox buildHistoryRow(ConnectionHistoryEntry entry) {
+        Label nameLabel = new Label(entry.profileName() != null ? entry.profileName() : entry.displayLabel());
+        nameLabel.getStyleClass().add("profile-cell-name");
+        Label timeLabel = new Label(entry.timeAgo());
+        timeLabel.getStyleClass().add("history-time-label");
+        HBox row = new HBox(8, nameLabel, timeLabel);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
+    }
+
+    private void loadProfileIntoForm(ConnectionProfile profile) {
+        editingProfileId = profile.getId();
+        nameField.setText(profile.getName());
+        hostField.setText(profile.getHost());
+        portField.setText(String.valueOf(profile.getPort()));
+        usernameField.setText(profile.getUsername());
+        keyPathField.setText(profile.getPrivateKeyPath());
+        passphraseField.clear();
+        setSelectedColorTag(profile.getColorTag());
+        productionCheck.setSelected(profile.isProduction());
+        updateCommandPreview();
+    }
+
+    private void loadHistoryIntoForm(ConnectionHistoryEntry entry) {
+        editingProfileId = null;
+        nameField.setText(entry.profileName() != null ? entry.profileName() : "");
+        hostField.setText(entry.host());
+        portField.setText(String.valueOf(entry.port()));
+        usernameField.setText(entry.username());
+        keyPathField.setText(entry.privateKeyPath());
+        passphraseField.clear();
+        setSelectedColorTag(ConnectionProfile.DEFAULT_COLOR);
+        productionCheck.setSelected(false);
+        updateCommandPreview();
+    }
+
+    @FXML
+    private void onPrimaryAction() {
+        if (showingRecent) {
+            reconnectSelectedHistory();
+        } else {
+            onNewProfile();
+        }
+    }
+
+    @FXML
+    private void onSecondaryAction() {
+        if (showingRecent) {
+            removeSelectedHistory();
+        } else {
+            onDuplicateProfile();
+        }
+    }
+
+    @FXML
+    private void onTertiaryAction() {
+        if (showingRecent) {
+            clearAllHistory();
+        } else {
+            onDeleteProfile();
+        }
+    }
+
+    private void reconnectSelectedHistory() {
+        Object selected = profileListView.getSelectionModel().getSelectedItem();
+        if (!(selected instanceof ConnectionHistoryEntry entry)) {
+            return;
+        }
+        loadHistoryIntoForm(entry);
+        onTestConnection();
+    }
+
+    private void removeSelectedHistory() {
+        Object selected = profileListView.getSelectionModel().getSelectedItem();
+        if (!(selected instanceof ConnectionHistoryEntry entry)) {
+            return;
+        }
+        historyStore.remove(entry);
+        historyEntries.remove(entry);
+    }
+
+    private void clearAllHistory() {
+        if (historyEntries.isEmpty()) {
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Clear all connection history? This cannot be undone.",
+                ButtonType.YES, ButtonType.NO);
+        ThemeManager.apply(confirm.getDialogPane());
+        confirm.setHeaderText(null);
+        confirm.showAndWait().ifPresent(button -> {
+            if (button == ButtonType.YES) {
+                historyStore.clearAll();
+                historyEntries.clear();
+            }
+        });
+    }
+
+    private void onNewProfile() {
+        suppressSelectionEvents = true;
+        profileListView.getSelectionModel().clearSelection();
+        suppressSelectionEvents = false;
+
+        editingProfileId = null;
+        nameField.clear();
+        hostField.clear();
+        portField.setText("22");
+        usernameField.clear();
+        keyPathField.clear();
+        passphraseField.clear();
+        setSelectedColorTag(ConnectionProfile.DEFAULT_COLOR);
+        productionCheck.setSelected(false);
+        updateCommandPreview();
+        nameField.requestFocus();
+    }
+
+    private void onDuplicateProfile() {
+        ConnectionProfile base = currentProfile();
+        String copyName = base.getName().isBlank() ? "Copy" : base.getName() + " (copy)";
+        ConnectionProfile copy = base.copyAsNew(copyName);
+        try {
+            profileStore.save(copy);
+            profiles.add(copy);
+            suppressSelectionEvents = true;
+            profileListView.getSelectionModel().select(copy);
+            suppressSelectionEvents = false;
+            loadProfileIntoForm(copy);
+            showStatus("Duplicated as \"" + copy.displayName() + "\".", false);
+        } catch (Exception e) {
+            showStatus("Could not duplicate profile: " + e.getMessage(), true);
+        }
+    }
+
+    private void onDeleteProfile() {
+        Object selectedObj = profileListView.getSelectionModel().getSelectedItem();
+        if (!(selectedObj instanceof ConnectionProfile selected)) {
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete profile \"" + selected.displayName() + "\"? This cannot be undone.",
+                ButtonType.YES, ButtonType.NO);
+        ThemeManager.apply(confirm.getDialogPane());
+        confirm.setHeaderText(null);
+        confirm.showAndWait().ifPresent(button -> {
+            if (button != ButtonType.YES) {
+                return;
+            }
+            profileStore.delete(selected.getId());
+            profiles.remove(selected);
+            if (selected.getId().equals(editingProfileId)) {
+                onNewProfile();
+            }
+            showStatus("Profile deleted.", false);
+        });
     }
 
     @FXML
@@ -67,12 +420,34 @@ public class LoginController {
 
     @FXML
     private void onSaveProfile() {
+        ConnectionProfile profile = currentProfile();
         try {
-            profileStore.save(currentProfile());
+            profileStore.save(profile);
+            int existingIndex = indexOfProfileById(profile.getId());
+            if (existingIndex >= 0) {
+                profiles.set(existingIndex, profile);
+            } else {
+                profiles.add(profile);
+            }
+            editingProfileId = profile.getId();
+            suppressSelectionEvents = true;
+            if (!showingRecent) {
+                profileListView.getSelectionModel().select(profile);
+            }
+            suppressSelectionEvents = false;
             showStatus("Profile saved.", false);
         } catch (Exception e) {
             showStatus("Could not save profile: " + e.getMessage(), true);
         }
+    }
+
+    private int indexOfProfileById(String id) {
+        for (int i = 0; i < profiles.size(); i++) {
+            if (profiles.get(i).getId().equals(id)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @FXML
@@ -94,6 +469,11 @@ public class LoginController {
             sessionManager.connect(profile.getHost(), profile.getPort(), profile.getUsername(),
                     profile.getPrivateKeyPath(), passphrase, createHostKeyPrompt());
             String rootPath = sessionManager.resolveHomeDirectory();
+            profileStore.setLastUsedId(profile.getId());
+            historyStore.record(new ConnectionHistoryEntry(profile.getHost(), profile.getPort(), profile.getUsername(),
+                    profile.getPrivateKeyPath(),
+                    profile.getName() == null || profile.getName().isBlank() ? null : profile.getName(),
+                    System.currentTimeMillis()));
 
             Platform.runLater(() -> {
                 try {
@@ -211,7 +591,7 @@ public class LoginController {
     }
 
     /** Runs {@code onFxThread} on the FX thread and blocks the calling (background) thread for its result. */
-    private boolean awaitFxResult(java.util.function.Supplier<Boolean> onFxThread) {
+    private boolean awaitFxResult(Supplier<Boolean> onFxThread) {
         AtomicBoolean result = new AtomicBoolean(false);
         CountDownLatch latch = new CountDownLatch(1);
         Platform.runLater(() -> {
@@ -231,10 +611,16 @@ public class LoginController {
 
     private ConnectionProfile currentProfile() {
         ConnectionProfile profile = new ConnectionProfile();
+        if (editingProfileId != null && !editingProfileId.isBlank()) {
+            profile.setId(editingProfileId);
+        }
+        profile.setName(nameField.getText().trim());
         profile.setHost(hostField.getText().trim());
         profile.setPort(parsePort(portField.getText()));
         profile.setUsername(usernameField.getText().trim());
         profile.setPrivateKeyPath(keyPathField.getText().trim());
+        profile.setColorTag(selectedColor);
+        profile.setProduction(productionCheck.isSelected());
         return profile;
     }
 

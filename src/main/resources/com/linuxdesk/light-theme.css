@@ -144,6 +144,100 @@
     -fx-background-color: #dfe2e8;
 }
 
+/* ---------- Login screen: profile sidebar ---------- */
+
+.profile-sidebar {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 10;
+    -fx-border-color: #e0e2e7;
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-padding: 14;
+}
+
+.profile-list {
+    -fx-background-color: #f7f8fa;
+    -fx-border-color: #d7dae0;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+.profile-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 6 8 6 8;
+}
+
+.profile-list .list-cell:filled:selected {
+    -fx-background-color: #eceef2;
+}
+
+.profile-list .list-cell:filled:hover {
+    -fx-background-color: #f0f1f4;
+}
+
+.profile-cell-name {
+    -fx-text-fill: #2a2d34;
+    -fx-font-size: 12px;
+}
+
+.history-time-label {
+    -fx-text-fill: #9aa0ab;
+    -fx-font-size: 10px;
+}
+
+.sidebar-toggle-row {
+    -fx-background-color: #f7f8fa;
+    -fx-border-color: #d7dae0;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 2;
+}
+
+.sidebar-toggle-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 11px;
+    -fx-background-radius: 3;
+    -fx-padding: 6 0 6 0;
+    -fx-cursor: hand;
+}
+
+.sidebar-toggle-button:selected {
+    -fx-background-color: #eceef2;
+    -fx-text-fill: #1a1d24;
+}
+
+.profile-prod-badge {
+    -fx-text-fill: #a3221b;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+    -fx-background-color: #fbe3e1;
+    -fx-background-radius: 3;
+    -fx-padding: 1 5 1 5;
+}
+
+.color-swatch {
+    -fx-min-width: 22px;
+    -fx-min-height: 22px;
+    -fx-max-width: 22px;
+    -fx-max-height: 22px;
+    -fx-background-radius: 11px;
+    -fx-border-radius: 11px;
+    -fx-border-color: transparent;
+    -fx-border-width: 2;
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+.color-swatch:selected {
+    -fx-border-color: #1a1d24;
+}
+
+.production-check {
+    -fx-text-fill: #a3660b;
+    -fx-font-size: 11px;
+}
+
 /* ---------- Desktop / folder view ---------- */
 
 .desktop-root {
@@ -165,6 +259,15 @@
     -fx-text-fill: #1a1d24;
     -fx-font-family: "Consolas", monospace;
     -fx-font-size: 12px;
+}
+
+.production-badge {
+    -fx-text-fill: #a3221b;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-background-color: #fbe3e1;
+    -fx-background-radius: 3;
+    -fx-padding: 3 7 3 7;
 }
 
 .desktop-scroll {

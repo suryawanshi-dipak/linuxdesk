@@ -19,6 +19,7 @@
             </padding>
             <Button fx:id="backButton" text="← Back" onAction="#onBack" styleClass="secondary-button"/>
             <Label fx:id="hostLabel" styleClass="host-label"/>
+            <Label fx:id="productionBadge" text="PRODUCTION" styleClass="production-badge" visible="false" managed="false"/>
             <Label fx:id="pathLabel" styleClass="path-label"/>
             <Region HBox.hgrow="ALWAYS"/>
             <Label fx:id="statusLabel" styleClass="status-label"/>
