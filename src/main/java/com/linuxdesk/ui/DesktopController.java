@@ -7,6 +7,7 @@ import com.linuxdesk.ssh.SshSessionManager;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.geometry.Bounds;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -19,23 +20,31 @@ import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
+import javafx.stage.Popup;
+import javafx.stage.PopupWindow;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
 import java.io.File;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
 
 public class DesktopController {
 
@@ -47,6 +56,8 @@ public class DesktopController {
     @FXML private FlowPane iconGrid;
     @FXML private ScrollPane scrollPane;
     @FXML private Label statusLabel;
+    @FXML private Button startButton;
+    @FXML private TextField searchField;
 
     private enum SortMode { NAME, SIZE }
 
@@ -56,12 +67,207 @@ public class DesktopController {
     private RemoteEntry clipboardEntry;
     private List<RemoteEntry> currentEntries = List.of();
     private SortMode sortMode = SortMode.NAME;
+    private Popup startMenuPopup;
+    private Popup searchResultsPopup;
+    private List<SearchHit> lastMatches = List.of();
+
+    private enum HitKind { COMMAND, FOLDER, FILE }
+
+    private record SearchHit(String label, HitKind kind, Runnable action) {
+    }
 
     @FXML
     private void initialize() {
         scrollPane.setOnContextMenuRequested(event -> {
             createBackgroundContextMenu().show(scrollPane, event.getScreenX(), event.getScreenY());
         });
+
+        startButton.setOnAction(e -> toggleStartMenu());
+
+        searchField.textProperty().addListener((obs, old, text) -> updateSearchResults(text));
+        searchField.setOnAction(e -> openTopMatch());
+        searchField.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ESCAPE) {
+                searchField.clear();
+                hideSearchResults();
+            }
+        });
+        searchField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (isFocused && !searchField.getText().isBlank()) {
+                updateSearchResults(searchField.getText());
+            }
+        });
+    }
+
+    private void updateSearchResults(String text) {
+        String query = text == null ? "" : text.trim();
+        if (query.isEmpty()) {
+            hideSearchResults();
+            lastMatches = List.of();
+            return;
+        }
+        String needle = query.toLowerCase(Locale.ROOT);
+
+        List<SearchHit> hits = new ArrayList<>();
+        addCommandHit(hits, needle, "Task Manager", this::onOpenTaskManager);
+        addCommandHit(hits, needle, "Terminal", this::onOpenTerminal);
+        addCommandHit(hits, needle, "Log Viewer", this::onOpenLogViewer);
+        addCommandHit(hits, needle, "Disconnect", this::onDisconnect);
+
+        currentEntries.stream()
+                .filter(entry -> entry.name().toLowerCase(Locale.ROOT).contains(needle))
+                .sorted(Comparator.comparing(RemoteEntry::name, String.CASE_INSENSITIVE_ORDER))
+                .limit(20)
+                .forEach(entry -> hits.add(new SearchHit(entry.name(),
+                        entry.directory() ? HitKind.FOLDER : HitKind.FILE,
+                        () -> {
+                            if (entry.directory()) {
+                                navigateTo(entry.path(), true);
+                            } else {
+                                openFileEditor(entry);
+                            }
+                        })));
+
+        lastMatches = hits;
+        showSearchResults(hits);
+    }
+
+    private void addCommandHit(List<SearchHit> hits, String needle, String label, Runnable action) {
+        if (label.toLowerCase(Locale.ROOT).contains(needle)) {
+            hits.add(new SearchHit(label, HitKind.COMMAND, action));
+        }
+    }
+
+    private void showSearchResults(List<SearchHit> hits) {
+        hideSearchResults();
+
+        VBox card = new VBox(2);
+        card.getStyleClass().add("start-menu");
+        card.setPrefWidth(Math.max(searchField.getWidth(), 280));
+        ThemeManager.apply(card);
+
+        if (hits.isEmpty()) {
+            Label empty = new Label("No matching items in this folder");
+            empty.getStyleClass().add("search-empty-label");
+            card.getChildren().add(empty);
+        } else {
+            HitKind previousKind = null;
+            for (SearchHit hit : hits) {
+                if (previousKind == HitKind.COMMAND && hit.kind() != HitKind.COMMAND) {
+                    card.getChildren().add(new Separator());
+                }
+                card.getChildren().add(createSearchResultRow(hit));
+                previousKind = hit.kind();
+            }
+        }
+
+        Popup popup = new Popup();
+        popup.setAutoHide(true);
+        popup.setAnchorLocation(PopupWindow.AnchorLocation.WINDOW_BOTTOM_LEFT);
+        popup.getContent().add(card);
+
+        Bounds bounds = searchField.localToScreen(searchField.getBoundsInLocal());
+        popup.show(searchField, bounds.getMinX(), bounds.getMinY());
+        searchResultsPopup = popup;
+    }
+
+    private void hideSearchResults() {
+        if (searchResultsPopup != null) {
+            searchResultsPopup.hide();
+            searchResultsPopup = null;
+        }
+    }
+
+    private HBox createSearchResultRow(SearchHit hit) {
+        StackPane icon = switch (hit.kind()) {
+            case COMMAND -> commandIcon();
+            case FOLDER -> IconFactory.createSmallFolderIcon();
+            case FILE -> IconFactory.createSmallFileIcon();
+        };
+
+        Label label = new Label(hit.label());
+        label.getStyleClass().add("search-result-label");
+
+        HBox row = new HBox(10, icon, label);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("search-result-row");
+        row.setOnMouseClicked(event -> openHit(hit));
+        return row;
+    }
+
+    private StackPane commandIcon() {
+        Label glyph = new Label("⌘");
+        glyph.getStyleClass().add("search-command-icon");
+        StackPane pane = new StackPane(glyph);
+        pane.setPrefSize(20, 20);
+        return pane;
+    }
+
+    private void openTopMatch() {
+        if (!lastMatches.isEmpty()) {
+            openHit(lastMatches.get(0));
+        }
+    }
+
+    private void openHit(SearchHit hit) {
+        hideSearchResults();
+        searchField.clear();
+        hit.action().run();
+    }
+
+    private void toggleStartMenu() {
+        if (startMenuPopup != null && startMenuPopup.isShowing()) {
+            startMenuPopup.hide();
+            return;
+        }
+        startMenuPopup = buildStartMenu();
+        Bounds bounds = startButton.localToScreen(startButton.getBoundsInLocal());
+        startMenuPopup.show(startButton, bounds.getMinX(), bounds.getMinY());
+    }
+
+    private Popup buildStartMenu() {
+        Popup popup = new Popup();
+        popup.setAutoHide(true);
+        popup.setAnchorLocation(PopupWindow.AnchorLocation.WINDOW_BOTTOM_LEFT);
+
+        VBox card = new VBox(2);
+        card.getStyleClass().add("start-menu");
+        ThemeManager.apply(card);
+
+        Button taskManagerItem = startMenuItem("Task Manager");
+        taskManagerItem.setOnAction(e -> {
+            popup.hide();
+            onOpenTaskManager();
+        });
+
+        Button terminalItem = startMenuItem("Terminal");
+        terminalItem.setOnAction(e -> {
+            popup.hide();
+            onOpenTerminal();
+        });
+
+        Button logViewerItem = startMenuItem("Log Viewer");
+        logViewerItem.setOnAction(e -> {
+            popup.hide();
+            onOpenLogViewer();
+        });
+
+        Button disconnectItem = startMenuItem("Disconnect");
+        disconnectItem.setOnAction(e -> {
+            popup.hide();
+            onDisconnect();
+        });
+
+        card.getChildren().addAll(taskManagerItem, terminalItem, logViewerItem, new Separator(), disconnectItem);
+        popup.getContent().add(card);
+        return popup;
+    }
+
+    private Button startMenuItem(String text) {
+        Button button = new Button(text);
+        button.getStyleClass().add("start-menu-item");
+        button.setMaxWidth(Double.MAX_VALUE);
+        return button;
     }
 
     private ContextMenu createBackgroundContextMenu() {
@@ -301,7 +507,6 @@ public class DesktopController {
         }
     }
 
-    @FXML
     private void onOpenTerminal() {
         openTerminalWindow(null);
     }
@@ -327,7 +532,6 @@ public class DesktopController {
         }
     }
 
-    @FXML
     private void onOpenTaskManager() {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/task-manager.fxml"));
@@ -349,7 +553,27 @@ public class DesktopController {
         }
     }
 
-    @FXML
+    private void onOpenLogViewer() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/log-viewer.fxml"));
+            Parent root = loader.load();
+
+            Scene scene = new Scene(root, 820, 520);
+            ThemeManager.apply(scene);
+
+            Stage logViewerStage = new Stage();
+            logViewerStage.initOwner(iconGrid.getScene().getWindow());
+            logViewerStage.setScene(scene);
+
+            LogViewerController controller = loader.getController();
+            controller.init(sessionManager, logViewerStage);
+
+            logViewerStage.show();
+        } catch (Exception e) {
+            statusLabel.setText("Failed to open log viewer: " + e.getMessage());
+        }
+    }
+
     private void onDisconnect() {
         sessionManager.close();
         try {
@@ -364,10 +588,16 @@ public class DesktopController {
             history.push(currentPath);
             backButton.setDisable(false);
         }
+        boolean directoryChanged = currentPath == null || !currentPath.equals(path);
         currentPath = path;
         pathLabel.setText(path);
         statusLabel.setText("Loading...");
         iconGrid.getChildren().clear();
+        if (directoryChanged) {
+            currentEntries = List.of();
+            hideSearchResults();
+            searchField.setText("");
+        }
 
         Thread worker = new Thread(() -> {
             try {
@@ -389,7 +619,7 @@ public class DesktopController {
         for (RemoteEntry entry : sorted) {
             iconGrid.getChildren().add(createIconNode(entry));
         }
-        statusLabel.setText(entries.size() + " item" + (entries.size() == 1 ? "" : "s"));
+        statusLabel.setText(sorted.size() + " item" + (sorted.size() == 1 ? "" : "s"));
     }
 
     private static List<RemoteEntry> sortEntries(List<RemoteEntry> entries, SortMode mode) {

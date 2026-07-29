@@ -1,7 +1,7 @@
 package com.linuxdesk.ui;
 
+import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.DialogPane;
 
 import java.util.prefs.Preferences;
 
@@ -32,8 +32,8 @@ public final class ThemeManager {
         scene.getStylesheets().setAll(stylesheetUrl());
     }
 
-    public static void apply(DialogPane dialogPane) {
-        dialogPane.getStylesheets().setAll(stylesheetUrl());
+    public static void apply(Parent root) {
+        root.getStylesheets().setAll(stylesheetUrl());
     }
 
     public static void toggle(Scene scene) {

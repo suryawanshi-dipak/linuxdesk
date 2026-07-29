@@ -6,34 +6,54 @@
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
 
 <BorderPane styleClass="desktop-root" xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml" fx:controller="com.linuxdesk.ui.TaskManagerController">
     <top>
-        <HBox spacing="12" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
+        <HBox spacing="10" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
             <padding>
                 <Insets top="10" right="16" bottom="10" left="16"/>
             </padding>
-            <TextField fx:id="searchField" promptText="Type a name or PID to search" styleClass="field-input" prefWidth="260"/>
+            <ToggleButton fx:id="processesToggle" text="Processes" selected="true" styleClass="view-toggle-button"/>
+            <ToggleButton fx:id="servicesToggle" text="Services" styleClass="view-toggle-button"/>
+            <TextField fx:id="searchField" promptText="Search..." styleClass="field-input" prefWidth="200"/>
             <Region HBox.hgrow="ALWAYS"/>
             <Label fx:id="statusLabel" styleClass="status-label"/>
             <Button text="Refresh" onAction="#onRefresh" styleClass="secondary-button"/>
             <Button fx:id="endTaskButton" text="End Task" onAction="#onEndTask" styleClass="primary-button" disable="true"/>
+            <Button fx:id="serviceStartButton" text="Start" onAction="#onServiceStart" styleClass="secondary-button" disable="true" visible="false" managed="false"/>
+            <Button fx:id="serviceStopButton" text="Stop" onAction="#onServiceStop" styleClass="secondary-button" disable="true" visible="false" managed="false"/>
+            <Button fx:id="serviceRestartButton" text="Restart" onAction="#onServiceRestart" styleClass="secondary-button" disable="true" visible="false" managed="false"/>
+            <Button fx:id="serviceEnableButton" text="Enable" onAction="#onServiceEnable" styleClass="secondary-button" disable="true" visible="false" managed="false"/>
+            <Button fx:id="serviceDisableButton" text="Disable" onAction="#onServiceDisable" styleClass="secondary-button" disable="true" visible="false" managed="false"/>
         </HBox>
     </top>
     <center>
-        <TableView fx:id="processTable" styleClass="task-table">
-            <columns>
-                <TableColumn fx:id="nameColumn" text="Name" prefWidth="220"/>
-                <TableColumn fx:id="pidColumn" text="PID" prefWidth="80"/>
-                <TableColumn fx:id="userColumn" text="User" prefWidth="120"/>
-                <TableColumn fx:id="statusColumn" text="Status" prefWidth="90"/>
-                <TableColumn fx:id="cpuColumn" text="CPU" prefWidth="90"/>
-                <TableColumn fx:id="memColumn" text="Memory" prefWidth="110"/>
-            </columns>
-        </TableView>
+        <StackPane>
+            <TableView fx:id="processTable" styleClass="task-table">
+                <columns>
+                    <TableColumn fx:id="nameColumn" text="Name" prefWidth="220"/>
+                    <TableColumn fx:id="pidColumn" text="PID" prefWidth="80"/>
+                    <TableColumn fx:id="userColumn" text="User" prefWidth="120"/>
+                    <TableColumn fx:id="statusColumn" text="Status" prefWidth="90"/>
+                    <TableColumn fx:id="cpuColumn" text="CPU" prefWidth="90"/>
+                    <TableColumn fx:id="memColumn" text="Memory" prefWidth="110"/>
+                </columns>
+            </TableView>
+            <TableView fx:id="serviceTable" styleClass="task-table" visible="false" managed="false">
+                <columns>
+                    <TableColumn fx:id="serviceNameColumn" text="Name" prefWidth="220"/>
+                    <TableColumn fx:id="activeColumn" text="Active" prefWidth="90"/>
+                    <TableColumn fx:id="subColumn" text="Sub" prefWidth="90"/>
+                    <TableColumn fx:id="enabledColumn" text="Enabled" prefWidth="100"/>
+                    <TableColumn fx:id="descriptionColumn" text="Description" prefWidth="320"/>
+                </columns>
+            </TableView>
+        </StackPane>
     </center>
 </BorderPane>

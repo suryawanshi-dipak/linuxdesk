@@ -24,7 +24,9 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -266,6 +268,13 @@ public class SshSessionManager implements AutoCloseable {
         return new TerminalSession(channel);
     }
 
+    /** Opens a non-interactive exec channel streaming a live-tailing command (journalctl -f / tail -F). */
+    public LogSession tailLog(String command) throws IOException {
+        ChannelExec channel = session.createExecChannel(command);
+        channel.open().verify(15, TimeUnit.SECONDS);
+        return new LogSession(channel);
+    }
+
     /** Snapshot of remote processes via `ps`, sorted by CPU descending (server-side). */
     public List<RemoteProcess> listProcesses() throws IOException {
         CommandResult result = execRaw("ps -eo pid,user,%cpu,rss,stat,comm --no-headers --sort=-%cpu");
@@ -300,6 +309,53 @@ public class SshSessionManager implements AutoCloseable {
         if (result.exitStatus() != null && result.exitStatus() != 0) {
             String message = result.output().trim();
             throw new IOException(message.isEmpty() ? "kill exited with status " + result.exitStatus() : message);
+        }
+    }
+
+    /** Snapshot of systemd services, merging runtime state (list-units) with boot-enablement (list-unit-files). */
+    public List<RemoteService> listServices() throws IOException {
+        CommandResult unitsResult = execRaw("systemctl list-units --type=service --all --plain --no-legend --no-pager --full");
+        CommandResult filesResult = execRaw("systemctl list-unit-files --type=service --plain --no-legend --no-pager");
+
+        Map<String, String> enabledStates = new HashMap<>();
+        for (String line : filesResult.output().split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            String[] parts = trimmed.split("\\s+", 3);
+            if (parts.length >= 2) {
+                enabledStates.put(parts[0], parts[1]);
+            }
+        }
+
+        List<RemoteService> services = new ArrayList<>();
+        for (String line : unitsResult.output().split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            String[] parts = trimmed.split("\\s+", 5);
+            if (parts.length < 4) {
+                continue;
+            }
+            String unit = parts[0];
+            String load = parts[1];
+            String active = parts[2];
+            String sub = parts[3];
+            String description = parts.length == 5 ? parts[4] : "";
+            String enabled = enabledStates.getOrDefault(unit, "-");
+            services.add(new RemoteService(unit, load, active, sub, enabled, description));
+        }
+        return services;
+    }
+
+    /** Runs a systemctl control action (start/stop/restart/enable/disable) via passwordless sudo. */
+    public void controlService(String unit, String action) throws IOException {
+        CommandResult result = execRaw("sudo -n systemctl " + action + " " + unit);
+        if (result.exitStatus() != null && result.exitStatus() != 0) {
+            String message = result.output().trim();
+            throw new IOException(message.isEmpty() ? action + " exited with status " + result.exitStatus() : message);
         }
     }
 

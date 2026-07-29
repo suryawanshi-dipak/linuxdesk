@@ -351,3 +351,117 @@
 .task-table .table-row-cell:selected .table-cell {
     -fx-text-fill: #1a1d24;
 }
+
+.view-toggle-button {
+    -fx-background-color: #eceef2;
+    -fx-text-fill: #2a2d34;
+    -fx-background-radius: 4;
+    -fx-padding: 8 16 8 16;
+}
+
+.view-toggle-button:hover {
+    -fx-background-color: #dfe2e8;
+}
+
+.view-toggle-button:selected {
+    -fx-background-color: #3d7bd9;
+    -fx-text-fill: white;
+}
+
+/* ---------- Taskbar ---------- */
+
+.taskbar {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e0e2e7 transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.taskbar-start-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1a1d24;
+    -fx-font-weight: bold;
+    -fx-background-radius: 4;
+    -fx-padding: 8 16 8 16;
+    -fx-cursor: hand;
+}
+
+.taskbar-start-button:hover {
+    -fx-background-color: #eceef2;
+}
+
+.taskbar-start-button:armed {
+    -fx-background-color: #dfe2e8;
+}
+
+.taskbar-search {
+    -fx-background-color: #f7f8fa;
+    -fx-text-fill: #1a1d24;
+    -fx-prompt-text-fill: #9aa0ab;
+    -fx-border-color: #d7dae0;
+    -fx-border-radius: 16;
+    -fx-background-radius: 16;
+    -fx-padding: 7 16 7 16;
+}
+
+.taskbar-search:focused {
+    -fx-border-color: #3d7bd9;
+}
+
+/* ---------- Start menu ---------- */
+
+.start-menu {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 8;
+    -fx-border-color: #e0e2e7;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 8;
+    -fx-effect: dropshadow(gaussian, rgba(20,20,30,0.18), 24, 0.2, 0, -6);
+    -fx-min-width: 220;
+}
+
+.start-menu-item {
+    -fx-background-color: transparent;
+    -fx-text-fill: #2a2d34;
+    -fx-alignment: CENTER_LEFT;
+    -fx-background-radius: 4;
+    -fx-padding: 10 12 10 12;
+    -fx-font-size: 13px;
+    -fx-cursor: hand;
+}
+
+.start-menu-item:hover {
+    -fx-background-color: #eceef2;
+}
+
+.start-menu .separator .line {
+    -fx-border-color: #e0e2e7 transparent transparent transparent;
+}
+
+/* ---------- Search results ---------- */
+
+.search-result-row {
+    -fx-padding: 8 10 8 10;
+    -fx-background-radius: 4;
+    -fx-cursor: hand;
+}
+
+.search-result-row:hover {
+    -fx-background-color: #eceef2;
+}
+
+.search-result-label {
+    -fx-text-fill: #2a2d34;
+    -fx-font-size: 13px;
+}
+
+.search-empty-label {
+    -fx-text-fill: #9aa0ab;
+    -fx-font-size: 12px;
+    -fx-padding: 10 12 10 12;
+}
+
+.search-command-icon {
+    -fx-text-fill: #1f9d55;
+    -fx-font-size: 13px;
+}
