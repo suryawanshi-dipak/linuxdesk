@@ -4,7 +4,7 @@ A native desktop SSH GUI and remote management workspace built for Linux system 
 
 ## Status
 
-Early v1 in active development. The login window, SSH/SFTP connection, remote folder browser, file editor, file management (copy/paste/rename/delete/new), and an interactive SSH terminal are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
+Early v1 in active development. The login window, SSH/SFTP connection, remote folder browser, file editor, file management (copy/paste/rename/delete/new), an interactive SSH terminal, and a remote task manager are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
 
 ## Tech stack
 
@@ -22,6 +22,7 @@ Early v1 in active development. The login window, SSH/SFTP connection, remote fo
 - **File/folder context menu (right-click)** — Copy, Paste, Rename, and Delete on any file or folder. Delete and copy both recurse into directories; paste auto-suffixes `(copy)` on name collisions. Works on any file type, including zips, since copy/delete operate on raw bytes/paths.
 - **Background context menu (right-click empty space)** — Refresh, Sort by (Name/Size), New Folder/File, Paste, and Open Terminal Here (opens a terminal already `cd`'d into that folder).
 - **Interactive SSH terminal** — a real PTY-backed shell window (Terminal button in the toolbar) for running commands directly on the remote host, with ANSI escape codes filtered out for clean plain-text output.
+- **Task manager** — a Windows Task Manager–style window (Task Manager button in the toolbar) listing remote processes (Name, PID, User, Status, CPU%, Memory) via `ps` over SSH, sortable by column, searchable by name/PID, auto-refreshing every 2 seconds, with an End Task button (`kill -9`) behind a confirmation dialog.
 - **Custom dark/light UI** — undecorated window with our own title bar (drag to move, minimize/maximize/close) instead of the native OS chrome, plus a light/dark theme toggle button that persists across restarts and is applied consistently across every window and dialog.
 
 ## Known limitations (by design, for now)
@@ -49,11 +50,13 @@ src/main/java/com/linuxdesk/
   profile/ProfileStore.java   # persists connection details (never the passphrase)
   ssh/SshSessionManager.java  # SSH + SFTP session handling (Apache MINA SSHD)
   ssh/RemoteEntry.java
+  ssh/RemoteProcess.java      # parsed `ps` row for the task manager
   ssh/TerminalSession.java    # wraps a PTY shell channel for the terminal window
   ui/LoginController.java
   ui/DesktopController.java   # remote folder icon-grid view + file/folder context menus
   ui/EditorController.java    # remote text file viewer/editor
   ui/TerminalController.java  # interactive SSH terminal window
+  ui/TaskManagerController.java # remote process list + End Task
   ui/AnsiFilter.java          # strips ANSI escape codes for plain-text terminal output
   ui/TitleBar.java            # custom title bar (drag, min/max/close, theme toggle)
   ui/ThemeManager.java        # light/dark theme switching + persistence (windows + dialogs)
@@ -63,6 +66,7 @@ src/main/resources/com/linuxdesk/
   desktop.fxml
   editor.fxml
   terminal.fxml
+  task-manager.fxml
   dark-theme.css
   light-theme.css
 ```

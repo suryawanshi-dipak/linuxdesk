@@ -199,6 +199,28 @@ public class DesktopController {
     }
 
     @FXML
+    private void onOpenTaskManager() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/task-manager.fxml"));
+            Parent root = loader.load();
+
+            Scene scene = new Scene(root, 720, 480);
+            ThemeManager.apply(scene);
+
+            Stage taskManagerStage = new Stage();
+            taskManagerStage.initOwner(iconGrid.getScene().getWindow());
+            taskManagerStage.setScene(scene);
+
+            TaskManagerController controller = loader.getController();
+            controller.init(sessionManager, taskManagerStage);
+
+            taskManagerStage.show();
+        } catch (Exception e) {
+            statusLabel.setText("Failed to open task manager: " + e.getMessage());
+        }
+    }
+
+    @FXML
     private void onDisconnect() {
         sessionManager.close();
         try {

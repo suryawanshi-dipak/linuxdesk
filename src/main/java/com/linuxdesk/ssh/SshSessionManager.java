@@ -1,7 +1,9 @@
 package com.linuxdesk.ssh;
 
 import org.apache.sshd.client.SshClient;
+import org.apache.sshd.client.channel.ChannelExec;
 import org.apache.sshd.client.channel.ChannelShell;
+import org.apache.sshd.client.channel.ClientChannelEvent;
 import org.apache.sshd.client.keyverifier.AcceptAllServerKeyVerifier;
 import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.common.config.keys.FilePasswordProvider;
@@ -9,6 +11,7 @@ import org.apache.sshd.common.keyprovider.FileKeyPairProvider;
 import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.SftpClientFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -184,6 +187,57 @@ public class SshSessionManager implements AutoCloseable {
         channel.setEnv("TERM", "xterm-256color");
         channel.open().verify(15, TimeUnit.SECONDS);
         return new TerminalSession(channel);
+    }
+
+    /** Snapshot of remote processes via `ps`, sorted by CPU descending (server-side). */
+    public List<RemoteProcess> listProcesses() throws IOException {
+        CommandResult result = execRaw("ps -eo pid,user,%cpu,rss,stat,comm --no-headers --sort=-%cpu");
+        List<RemoteProcess> processes = new ArrayList<>();
+        for (String line : result.output().split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            String[] parts = trimmed.split("\\s+", 6);
+            if (parts.length < 6) {
+                continue;
+            }
+            try {
+                int pid = Integer.parseInt(parts[0]);
+                String user = parts[1];
+                double cpu = Double.parseDouble(parts[2]);
+                long rssKb = Long.parseLong(parts[3]);
+                String stat = parts[4];
+                String comm = parts[5];
+                processes.add(new RemoteProcess(pid, user, cpu, rssKb, stat, comm));
+            } catch (NumberFormatException ignored) {
+                // skip a line ps didn't format as expected
+            }
+        }
+        return processes;
+    }
+
+    /** Ends a remote process. Uses SIGKILL to match the "End Task" semantics of forcing termination. */
+    public void killProcess(int pid) throws IOException {
+        CommandResult result = execRaw("kill -9 " + pid);
+        if (result.exitStatus() != null && result.exitStatus() != 0) {
+            String message = result.output().trim();
+            throw new IOException(message.isEmpty() ? "kill exited with status " + result.exitStatus() : message);
+        }
+    }
+
+    private record CommandResult(String output, Integer exitStatus) {
+    }
+
+    private CommandResult execRaw(String command) throws IOException {
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream();
+             ChannelExec channel = session.createExecChannel(command)) {
+            channel.setOut(out);
+            channel.setErr(out);
+            channel.open().verify(10, TimeUnit.SECONDS);
+            channel.waitFor(EnumSet.of(ClientChannelEvent.CLOSED), TimeUnit.SECONDS.toMillis(15));
+            return new CommandResult(out.toString(StandardCharsets.UTF_8), channel.getExitStatus());
+        }
     }
 
     public boolean isConnected() {

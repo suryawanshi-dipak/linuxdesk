@@ -305,3 +305,49 @@
 .dialog-pane .button:default:hover {
     -fx-background-color: #35b94c;
 }
+
+/* ---------- Task manager table ---------- */
+
+.task-table {
+    -fx-background-color: #12151c;
+    -fx-table-cell-border-color: transparent;
+}
+
+.task-table .column-header-background {
+    -fx-background-color: #171b24;
+}
+
+.task-table .column-header, .task-table .filler {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent #2a2f3a transparent;
+}
+
+.task-table .column-header .label {
+    -fx-text-fill: #8b93a3;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.task-table .table-row-cell {
+    -fx-background-color: #12151c;
+    -fx-border-color: transparent transparent #1d2230 transparent;
+    -fx-text-fill: #d3d7de;
+}
+
+.task-table .table-row-cell:odd {
+    -fx-background-color: #14171f;
+}
+
+.task-table .table-row-cell:selected {
+    -fx-background-color: #24406b;
+}
+
+.task-table .table-cell {
+    -fx-text-fill: #d3d7de;
+    -fx-font-size: 12px;
+    -fx-alignment: CENTER-LEFT;
+}
+
+.task-table .table-row-cell:selected .table-cell {
+    -fx-text-fill: #ffffff;
+}
