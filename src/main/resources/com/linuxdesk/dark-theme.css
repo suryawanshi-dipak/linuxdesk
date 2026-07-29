@@ -465,3 +465,54 @@
     -fx-text-fill: #4fd67a;
     -fx-font-size: 13px;
 }
+
+/* ---------- Monitor ---------- */
+
+.monitor-section-title {
+    -fx-text-fill: #8b93a3;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.monitor-value-label {
+    -fx-text-fill: #e8e8ec;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.monitor-chart {
+    -fx-background-color: transparent;
+}
+
+.monitor-chart .chart-plot-background {
+    -fx-background-color: #0d1017;
+}
+
+.monitor-chart .chart-vertical-grid-lines {
+    -fx-stroke: transparent;
+}
+
+.monitor-chart .chart-horizontal-grid-lines {
+    -fx-stroke: #1d2230;
+}
+
+.monitor-chart .axis {
+    -fx-tick-label-fill: #8b93a3;
+    -fx-text-fill: #8b93a3;
+}
+
+.monitor-chart .axis-label {
+    -fx-text-fill: #8b93a3;
+}
+
+.monitor-chart .default-color0.chart-series-line {
+    -fx-stroke: #3d7bd9;
+    -fx-stroke-width: 2px;
+}
+
+/* ---------- Permissions dialog ---------- */
+
+.permissions-warning {
+    -fx-text-fill: #e5a13d;
+    -fx-font-size: 11px;
+}

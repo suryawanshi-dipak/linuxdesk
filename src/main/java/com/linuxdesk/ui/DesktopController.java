@@ -2,6 +2,7 @@ package com.linuxdesk.ui;
 
 import com.linuxdesk.App;
 import com.linuxdesk.model.ConnectionProfile;
+import com.linuxdesk.ssh.ArchiveFormat;
 import com.linuxdesk.ssh.RemoteEntry;
 import com.linuxdesk.ssh.SshSessionManager;
 import javafx.application.Platform;
@@ -112,6 +113,7 @@ public class DesktopController {
         addCommandHit(hits, needle, "Task Manager", this::onOpenTaskManager);
         addCommandHit(hits, needle, "Terminal", this::onOpenTerminal);
         addCommandHit(hits, needle, "Log Viewer", this::onOpenLogViewer);
+        addCommandHit(hits, needle, "Monitor", this::onOpenMonitor);
         addCommandHit(hits, needle, "Disconnect", this::onDisconnect);
 
         currentEntries.stream()
@@ -252,13 +254,19 @@ public class DesktopController {
             onOpenLogViewer();
         });
 
+        Button monitorItem = startMenuItem("Monitor");
+        monitorItem.setOnAction(e -> {
+            popup.hide();
+            onOpenMonitor();
+        });
+
         Button disconnectItem = startMenuItem("Disconnect");
         disconnectItem.setOnAction(e -> {
             popup.hide();
             onDisconnect();
         });
 
-        card.getChildren().addAll(taskManagerItem, terminalItem, logViewerItem, new Separator(), disconnectItem);
+        card.getChildren().addAll(taskManagerItem, terminalItem, logViewerItem, monitorItem, new Separator(), disconnectItem);
         popup.getContent().add(card);
         return popup;
     }
@@ -574,6 +582,27 @@ public class DesktopController {
         }
     }
 
+    private void onOpenMonitor() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/monitor.fxml"));
+            Parent root = loader.load();
+
+            Scene scene = new Scene(root, 780, 560);
+            ThemeManager.apply(scene);
+
+            Stage monitorStage = new Stage();
+            monitorStage.initOwner(iconGrid.getScene().getWindow());
+            monitorStage.setScene(scene);
+
+            MonitorController controller = loader.getController();
+            controller.init(sessionManager, monitorStage);
+
+            monitorStage.show();
+        } catch (Exception e) {
+            statusLabel.setText("Failed to open monitor: " + e.getMessage());
+        }
+    }
+
     private void onDisconnect() {
         sessionManager.close();
         try {
@@ -688,8 +717,145 @@ public class DesktopController {
         MenuItem downloadItem = new MenuItem("Download...");
         downloadItem.setOnAction(e -> downloadEntry(entry));
 
-        menu.getItems().addAll(copyItem, pasteItem, renameItem, deleteItem, new SeparatorMenuItem(), downloadItem);
+        MenuItem permissionsItem = new MenuItem("Permissions...");
+        permissionsItem.setOnAction(e -> PermissionsDialog.show(sessionManager, entry, ownerWindow(),
+                statusLabel::setText, () -> navigateTo(currentPath, false)));
+
+        Menu compressMenu = new Menu("Compress to");
+        MenuItem zipItem = new MenuItem("Zip");
+        zipItem.setOnAction(e -> compressEntry(entry, ArchiveFormat.ZIP));
+        MenuItem tarGzItem = new MenuItem("tar.gz");
+        tarGzItem.setOnAction(e -> compressEntry(entry, ArchiveFormat.TAR_GZ));
+        compressMenu.getItems().addAll(zipItem, tarGzItem);
+
+        menu.getItems().addAll(copyItem, pasteItem, renameItem, deleteItem, new SeparatorMenuItem(),
+                downloadItem, compressMenu, permissionsItem);
+
+        if (!entry.directory() && isArchiveName(entry.name())) {
+            MenuItem extractItem = new MenuItem("Extract Here");
+            extractItem.setOnAction(e -> extractEntry(entry));
+            menu.getItems().add(extractItem);
+        }
+
         return menu;
+    }
+
+    private static boolean isArchiveName(String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".zip") || lower.endsWith(".tar") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz")
+                || lower.endsWith(".tar.bz2") || lower.endsWith(".tbz2") || lower.endsWith(".tar.xz") || lower.endsWith(".txz");
+    }
+
+    private static String stripArchiveExtension(String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        String[] suffixes = {".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tbz2", ".txz", ".zip", ".tar"};
+        for (String suffix : suffixes) {
+            if (lower.endsWith(suffix)) {
+                return name.substring(0, name.length() - suffix.length());
+            }
+        }
+        return name + "-extracted";
+    }
+
+    private void compressEntry(RemoteEntry entry, ArchiveFormat format) {
+        String extension = format == ArchiveFormat.ZIP ? ".zip" : ".tar.gz";
+        String archiveName = entry.name() + extension;
+        String archivePath = currentPath.endsWith("/") ? currentPath + archiveName : currentPath + "/" + archiveName;
+        String parentDir = currentPath;
+
+        Thread worker = new Thread(() -> {
+            try {
+                if (sessionManager.exists(archivePath)) {
+                    Platform.runLater(() -> confirmOverwriteCompress(entry, format, archiveName, parentDir));
+                } else {
+                    Platform.runLater(() -> performCompress(entry, format, archiveName, parentDir));
+                }
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Compress failed: " + e.getMessage()));
+            }
+        }, "sftp-compress-check");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void confirmOverwriteCompress(RemoteEntry entry, ArchiveFormat format, String archiveName, String parentDir) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "\"" + archiveName + "\" already exists in this folder. Replace it?",
+                ButtonType.YES, ButtonType.NO);
+        ThemeManager.apply(confirm.getDialogPane());
+        confirm.setHeaderText(null);
+        confirm.showAndWait().ifPresent(button -> {
+            if (button == ButtonType.YES) {
+                performCompress(entry, format, archiveName, parentDir);
+            } else {
+                statusLabel.setText("Compress cancelled.");
+            }
+        });
+    }
+
+    private void performCompress(RemoteEntry entry, ArchiveFormat format, String archiveName, String parentDir) {
+        statusLabel.setText("Compressing " + entry.name() + "...");
+
+        Thread worker = new Thread(() -> {
+            try {
+                sessionManager.compress(parentDir, entry.name(), archiveName, format);
+                Platform.runLater(() -> navigateTo(currentPath, false));
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Compress failed: " + e.getMessage()));
+            }
+        }, "sftp-compress");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void extractEntry(RemoteEntry entry) {
+        String destName = stripArchiveExtension(entry.name());
+        String destPath = currentPath.endsWith("/") ? currentPath + destName : currentPath + "/" + destName;
+
+        Thread worker = new Thread(() -> {
+            try {
+                if (sessionManager.exists(destPath)) {
+                    Platform.runLater(() -> confirmOverwriteExtract(entry, destPath));
+                } else {
+                    Platform.runLater(() -> performExtract(entry, destPath));
+                }
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Extract failed: " + e.getMessage()));
+            }
+        }, "sftp-extract-check");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void confirmOverwriteExtract(RemoteEntry entry, String destPath) {
+        String destName = destPath.substring(destPath.lastIndexOf('/') + 1);
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "A folder named \"" + destName + "\" already exists. Extract into it anyway (matching files may be overwritten)?",
+                ButtonType.YES, ButtonType.NO);
+        ThemeManager.apply(confirm.getDialogPane());
+        confirm.setHeaderText(null);
+        confirm.showAndWait().ifPresent(button -> {
+            if (button == ButtonType.YES) {
+                performExtract(entry, destPath);
+            } else {
+                statusLabel.setText("Extract cancelled.");
+            }
+        });
+    }
+
+    private void performExtract(RemoteEntry entry, String destPath) {
+        statusLabel.setText("Extracting " + entry.name() + "...");
+
+        Thread worker = new Thread(() -> {
+            try {
+                sessionManager.extractArchive(entry.path(), destPath);
+                Platform.runLater(() -> navigateTo(currentPath, false));
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Extract failed: " + e.getMessage()));
+            }
+        }, "sftp-extract");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     private void pasteClipboard() {

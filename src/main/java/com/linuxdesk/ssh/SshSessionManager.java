@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -357,6 +358,168 @@ public class SshSessionManager implements AutoCloseable {
             String message = result.output().trim();
             throw new IOException(message.isEmpty() ? action + " exited with status " + result.exitStatus() : message);
         }
+    }
+
+    /** Current mode (octal, e.g. "0755") and owner/group of a remote path. */
+    public RemotePermissions getPermissions(String path) throws IOException {
+        CommandResult result = execRaw("stat -c '%a %U %G' " + shellQuote(path));
+        String[] parts = result.output().trim().split("\\s+");
+        if (parts.length < 3) {
+            throw new IOException("Unexpected stat output: " + result.output().trim());
+        }
+        return new RemotePermissions(parts[0], parts[1], parts[2]);
+    }
+
+    /** Changes the mode of a path (and, if recursive, everything under it) to the given octal mode. */
+    public void setPermissions(String path, String octalMode, boolean recursive) throws IOException {
+        CommandResult result = execRaw("chmod " + (recursive ? "-R " : "") + octalMode + " " + shellQuote(path));
+        if (result.exitStatus() != null && result.exitStatus() != 0) {
+            String message = result.output().trim();
+            throw new IOException(message.isEmpty() ? "chmod exited with status " + result.exitStatus() : message);
+        }
+    }
+
+    /** Changes owner/group of a path (and, if recursive, everything under it) via passwordless sudo. */
+    public void setOwnership(String path, String owner, String group, boolean recursive) throws IOException {
+        String ownerGroup = group.isBlank() ? owner : owner + ":" + group;
+        CommandResult result = execRaw("sudo -n chown " + (recursive ? "-R " : "") + shellQuote(ownerGroup) + " " + shellQuote(path));
+        if (result.exitStatus() != null && result.exitStatus() != 0) {
+            String message = result.output().trim();
+            throw new IOException(message.isEmpty() ? "chown exited with status " + result.exitStatus() : message);
+        }
+    }
+
+    /** Counts files/directories under a path, for previewing the blast radius of a recursive change. */
+    public int countTree(String path) throws IOException {
+        CommandResult result = execRaw("find " + shellQuote(path) + " | wc -l");
+        try {
+            return Integer.parseInt(result.output().trim());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * One batched sample of CPU jiffies, memory, and disk usage for the monitor dashboard.
+     * CPU is raw cumulative counters — the caller diffs two consecutive samples to get a percentage.
+     */
+    public SystemSnapshot sampleSystem() throws IOException {
+        CommandResult result = execRaw("cat /proc/stat | head -1; echo '---SPLIT---'; free -b; "
+                + "echo '---SPLIT---'; df -h --output=source,size,used,avail,pcent,target -x tmpfs -x devtmpfs -x squashfs 2>/dev/null");
+        String[] sections = result.output().split("---SPLIT---");
+        CpuTimes cpuTimes = parseCpuTimes(sections.length > 0 ? sections[0] : "");
+        MemoryInfo memory = parseMemory(sections.length > 1 ? sections[1] : "");
+        List<DiskUsage> disks = parseDisks(sections.length > 2 ? sections[2] : "");
+        return new SystemSnapshot(cpuTimes, memory, disks);
+    }
+
+    private static CpuTimes parseCpuTimes(String section) {
+        String trimmed = section.trim();
+        String line = trimmed.isEmpty() ? "" : trimmed.split("\n")[0];
+        String[] parts = line.trim().split("\\s+");
+        long user = parts.length > 1 ? Long.parseLong(parts[1]) : 0;
+        long nice = parts.length > 2 ? Long.parseLong(parts[2]) : 0;
+        long system = parts.length > 3 ? Long.parseLong(parts[3]) : 0;
+        long idle = parts.length > 4 ? Long.parseLong(parts[4]) : 0;
+        long iowait = parts.length > 5 ? Long.parseLong(parts[5]) : 0;
+        long irq = parts.length > 6 ? Long.parseLong(parts[6]) : 0;
+        long softirq = parts.length > 7 ? Long.parseLong(parts[7]) : 0;
+        long steal = parts.length > 8 ? Long.parseLong(parts[8]) : 0;
+        return new CpuTimes(user, nice, system, idle, iowait, irq, softirq, steal);
+    }
+
+    private static MemoryInfo parseMemory(String section) {
+        long total = 0;
+        long used = 0;
+        long available = 0;
+        long swapTotal = 0;
+        long swapUsed = 0;
+        for (String line : section.trim().split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("Mem:")) {
+                String[] parts = trimmed.split("\\s+");
+                total = Long.parseLong(parts[1]);
+                used = Long.parseLong(parts[2]);
+                available = parts.length > 6 ? Long.parseLong(parts[6]) : Long.parseLong(parts[3]);
+            } else if (trimmed.startsWith("Swap:")) {
+                String[] parts = trimmed.split("\\s+");
+                swapTotal = Long.parseLong(parts[1]);
+                swapUsed = Long.parseLong(parts[2]);
+            }
+        }
+        return new MemoryInfo(total, used, available, swapTotal, swapUsed);
+    }
+
+    private static List<DiskUsage> parseDisks(String section) {
+        List<DiskUsage> disks = new ArrayList<>();
+        String[] lines = section.trim().split("\n");
+        for (int i = 1; i < lines.length; i++) {
+            String trimmed = lines[i].trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            String[] parts = trimmed.split("\\s+", 6);
+            if (parts.length < 6) {
+                continue;
+            }
+            disks.add(new DiskUsage(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]));
+        }
+        return disks;
+    }
+
+    /**
+     * Compresses {@code entryName} (a file or directory inside {@code parentDir}) into a new archive
+     * named {@code archiveName}, created alongside it. Runs the server's native zip/tar rather than
+     * streaming bytes through the SFTP client, since the server already has the source on disk.
+     */
+    public void compress(String parentDir, String entryName, String archiveName, ArchiveFormat format) throws IOException {
+        String command = format == ArchiveFormat.ZIP
+                ? "zip -r " + shellQuote(archiveName) + " " + shellQuote(entryName)
+                : "tar -czf " + shellQuote(archiveName) + " " + shellQuote(entryName);
+        CommandResult result = execRaw("cd " + shellQuote(parentDir) + " && " + command);
+        if (result.exitStatus() != null && result.exitStatus() != 0) {
+            String message = result.output().trim();
+            throw new IOException(message.isEmpty() ? "compress exited with status " + result.exitStatus() : message);
+        }
+    }
+
+    /**
+     * Extracts the archive at {@code archivePath} into a fresh {@code destDir} (created if needed).
+     * Extracting into a dedicated subdirectory rather than the current folder directly contains any
+     * zip-slip / path-traversal entries within that subtree instead of scattering them elsewhere.
+     */
+    public void extractArchive(String archivePath, String destDir) throws IOException {
+        String command = buildExtractCommand(archivePath);
+        CommandResult result = execRaw("mkdir -p " + shellQuote(destDir) + " && cd " + shellQuote(destDir) + " && " + command);
+        if (result.exitStatus() != null && result.exitStatus() != 0) {
+            String message = result.output().trim();
+            throw new IOException(message.isEmpty() ? "extract exited with status " + result.exitStatus() : message);
+        }
+    }
+
+    private static String buildExtractCommand(String archivePath) throws IOException {
+        String lower = archivePath.toLowerCase(Locale.ROOT);
+        String quoted = shellQuote(archivePath);
+        if (lower.endsWith(".zip")) {
+            return "unzip -o " + quoted;
+        }
+        if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
+            return "tar -xzf " + quoted;
+        }
+        if (lower.endsWith(".tar.bz2") || lower.endsWith(".tbz2")) {
+            return "tar -xjf " + quoted;
+        }
+        if (lower.endsWith(".tar.xz") || lower.endsWith(".txz")) {
+            return "tar -xJf " + quoted;
+        }
+        if (lower.endsWith(".tar")) {
+            return "tar -xf " + quoted;
+        }
+        throw new IOException("Unsupported archive type: " + archivePath);
+    }
+
+    private static String shellQuote(String value) {
+        return "'" + value.replace("'", "'\\''") + "'";
     }
 
     private record CommandResult(String output, Integer exitStatus) {

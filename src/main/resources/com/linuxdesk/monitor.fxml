@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.chart.LineChart?>
+<?import javafx.scene.chart.NumberAxis?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane styleClass="desktop-root" xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml" fx:controller="com.linuxdesk.ui.MonitorController">
+    <top>
+        <HBox spacing="10" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
+            <padding>
+                <Insets top="10" right="16" bottom="10" left="16"/>
+            </padding>
+            <Label text="System Monitor" styleClass="host-label"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="statusLabel" styleClass="status-label"/>
+        </HBox>
+    </top>
+    <center>
+        <VBox spacing="14" styleClass="desktop-surface">
+            <padding>
+                <Insets top="14" right="16" bottom="14" left="16"/>
+            </padding>
+            <HBox spacing="20">
+                <VBox spacing="4" HBox.hgrow="ALWAYS">
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <Label text="CPU" styleClass="monitor-section-title"/>
+                        <Label fx:id="cpuValueLabel" text="—" styleClass="monitor-value-label"/>
+                    </HBox>
+                    <LineChart fx:id="cpuChart" legendVisible="false" animated="false" createSymbols="false"
+                               prefHeight="180" styleClass="monitor-chart">
+                        <xAxis>
+                            <NumberAxis tickLabelsVisible="false" tickMarkVisible="false" side="BOTTOM"/>
+                        </xAxis>
+                        <yAxis>
+                            <NumberAxis lowerBound="0" upperBound="100" tickUnit="25" side="LEFT"/>
+                        </yAxis>
+                    </LineChart>
+                </VBox>
+                <VBox spacing="4" HBox.hgrow="ALWAYS">
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <Label text="Memory" styleClass="monitor-section-title"/>
+                        <Label fx:id="memoryValueLabel" text="—" styleClass="monitor-value-label"/>
+                    </HBox>
+                    <LineChart fx:id="memoryChart" legendVisible="false" animated="false" createSymbols="false"
+                               prefHeight="180" styleClass="monitor-chart">
+                        <xAxis>
+                            <NumberAxis tickLabelsVisible="false" tickMarkVisible="false" side="BOTTOM"/>
+                        </xAxis>
+                        <yAxis>
+                            <NumberAxis lowerBound="0" upperBound="100" tickUnit="25" side="LEFT"/>
+                        </yAxis>
+                    </LineChart>
+                </VBox>
+            </HBox>
+            <Label text="Disks" styleClass="monitor-section-title"/>
+            <TableView fx:id="diskTable" styleClass="task-table" VBox.vgrow="ALWAYS">
+                <columns>
+                    <TableColumn fx:id="filesystemColumn" text="Filesystem" prefWidth="160"/>
+                    <TableColumn fx:id="sizeColumn" text="Size" prefWidth="90"/>
+                    <TableColumn fx:id="usedColumn" text="Used" prefWidth="90"/>
+                    <TableColumn fx:id="availColumn" text="Avail" prefWidth="90"/>
+                    <TableColumn fx:id="usePercentColumn" text="Use%" prefWidth="80"/>
+                    <TableColumn fx:id="mountedOnColumn" text="Mounted on" prefWidth="180"/>
+                </columns>
+            </TableView>
+        </VBox>
+    </center>
+</BorderPane>
