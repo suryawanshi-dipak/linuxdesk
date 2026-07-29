@@ -186,10 +186,21 @@
     -fx-background-color: #1d2230;
 }
 
+.desktop-icon-drag-over {
+    -fx-background-color: #24406b;
+    -fx-border-color: #3d7bd9;
+    -fx-border-width: 2;
+    -fx-border-radius: 6;
+}
+
 .desktop-icon-label {
     -fx-text-fill: #d3d7de;
     -fx-font-size: 11px;
     -fx-text-alignment: center;
+}
+
+.desktop-surface-drag-over {
+    -fx-background-color: #171f30;
 }
 
 /* ---------- File editor ---------- */

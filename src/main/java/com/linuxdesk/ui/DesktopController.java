@@ -26,8 +26,11 @@ import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
@@ -97,6 +100,30 @@ public class DesktopController {
             if (isFocused && !searchField.getText().isBlank()) {
                 updateSearchResults(searchField.getText());
             }
+        });
+
+        iconGrid.setOnDragOver(event -> {
+            if (event.getGestureSource() != iconGrid && event.getDragboard().hasFiles()) {
+                event.acceptTransferModes(TransferMode.COPY);
+            }
+            event.consume();
+        });
+        iconGrid.setOnDragEntered(event -> {
+            if (event.getDragboard().hasFiles()) {
+                iconGrid.getStyleClass().add("desktop-surface-drag-over");
+            }
+        });
+        iconGrid.setOnDragExited(event -> iconGrid.getStyleClass().remove("desktop-surface-drag-over"));
+        iconGrid.setOnDragDropped(event -> {
+            Dragboard db = event.getDragboard();
+            boolean success = db.hasFiles();
+            if (success) {
+                for (File file : db.getFiles()) {
+                    startUpload(file, currentPath);
+                }
+            }
+            event.setDropCompleted(success);
+            event.consume();
         });
     }
 
@@ -327,7 +354,7 @@ public class DesktopController {
         chooser.setTitle("Upload File");
         File file = chooser.showOpenDialog(ownerWindow());
         if (file != null) {
-            startUpload(file);
+            startUpload(file, currentPath);
         }
     }
 
@@ -336,12 +363,11 @@ public class DesktopController {
         chooser.setTitle("Upload Folder");
         File dir = chooser.showDialog(ownerWindow());
         if (dir != null) {
-            startUpload(dir);
+            startUpload(dir, currentPath);
         }
     }
 
-    private void startUpload(File localFile) {
-        String targetDir = currentPath;
+    private void startUpload(File localFile, String targetDir) {
         String remotePath = targetDir.endsWith("/") ? targetDir + localFile.getName() : targetDir + "/" + localFile.getName();
 
         if (localFile.isDirectory()) {
@@ -692,7 +718,66 @@ public class DesktopController {
             event.consume();
         });
 
+        if (entry.directory()) {
+            box.setOnDragOver(event -> {
+                if (event.getGestureSource() != box && event.getDragboard().hasFiles()) {
+                    event.acceptTransferModes(TransferMode.COPY);
+                    event.consume();
+                }
+            });
+            box.setOnDragEntered(event -> {
+                if (event.getDragboard().hasFiles()) {
+                    box.getStyleClass().add("desktop-icon-drag-over");
+                }
+            });
+            box.setOnDragExited(event -> box.getStyleClass().remove("desktop-icon-drag-over"));
+            box.setOnDragDropped(event -> {
+                Dragboard db = event.getDragboard();
+                boolean success = db.hasFiles();
+                if (success) {
+                    for (File file : db.getFiles()) {
+                        startUpload(file, entry.path());
+                    }
+                }
+                event.setDropCompleted(success);
+                event.consume();
+            });
+        } else {
+            box.setOnDragDetected(event -> {
+                File tempFile = downloadToTemp(entry);
+                if (tempFile != null) {
+                    Dragboard db = box.startDragAndDrop(TransferMode.COPY);
+                    ClipboardContent content = new ClipboardContent();
+                    content.putFiles(List.of(tempFile));
+                    db.setContent(content);
+                }
+                event.consume();
+            });
+        }
+
         return box;
+    }
+
+    /**
+     * Drags a remote file out to Explorer by downloading it to a temp folder first, synchronously,
+     * inside the drag gesture — JavaFX's Dragboard needs a real local File before the OS drag can
+     * begin, so this isn't a true virtual-file drag (no async delayed rendering); it's a blocking
+     * download followed by a normal local-file drag. Fine for typical files, briefly freezes the
+     * UI for very large ones. Directories aren't supported this way — drag-out is files only.
+     */
+    private File downloadToTemp(RemoteEntry entry) {
+        try {
+            File tempDir = new File(System.getProperty("java.io.tmpdir"), "linuxdesk-drag");
+            tempDir.mkdirs();
+            File tempFile = new File(tempDir, entry.name());
+            statusLabel.setText("Preparing " + entry.name() + " to drag...");
+            sessionManager.download(entry, tempFile);
+            statusLabel.setText("Drag " + entry.name() + " to drop it.");
+            return tempFile;
+        } catch (Exception e) {
+            statusLabel.setText("Drag failed: " + e.getMessage());
+            return null;
+        }
     }
 
     private ContextMenu createEntryContextMenu(RemoteEntry entry) {
