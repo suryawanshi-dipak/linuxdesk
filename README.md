@@ -4,7 +4,7 @@ A native desktop SSH GUI and remote management workspace built for Linux system 
 
 ## Status
 
-Early v1 in active development. The login window, SSH/SFTP connection, remote folder browser, file editor, file management (copy/paste/rename/delete/new), an interactive SSH terminal, and a remote task manager are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
+Early v1 in active development. The login window, SSH/SFTP connection, remote folder browser, file editor, file management (copy/paste/rename/delete/new), local↔remote upload/download, an interactive SSH terminal, and a remote task manager are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
 
 ## Tech stack
 
@@ -20,7 +20,8 @@ Early v1 in active development. The login window, SSH/SFTP connection, remote fo
 - **Remote folder browser** — after a successful connection, the user's home directory opens as a desktop-style icon grid (folders/files as icons, double-click to navigate into a folder, Back button, breadcrumb path, Disconnect).
 - **File editor** — double-click a remote text file (up to 2 MB) to open it in a simple text editor window and save changes back over SFTP.
 - **File/folder context menu (right-click)** — Copy, Paste, Rename, and Delete on any file or folder. Delete and copy both recurse into directories; paste auto-suffixes `(copy)` on name collisions. Works on any file type, including zips, since copy/delete operate on raw bytes/paths.
-- **Background context menu (right-click empty space)** — Refresh, Sort by (Name/Size), New Folder/File, Paste, and Open Terminal Here (opens a terminal already `cd`'d into that folder).
+- **Background context menu (right-click empty space)** — Refresh, Sort by (Name/Size), New Folder/File, Upload (File.../Folder...), Paste, and Open Terminal Here (opens a terminal already `cd`'d into that folder).
+- **Upload / Download** — Upload a local file or folder (recursively) into the current remote directory via the background menu, with an overwrite confirmation on name collisions; Download any remote file or folder (recursively) to a chosen local folder via the file's context menu.
 - **Interactive SSH terminal** — a real PTY-backed shell window (Terminal button in the toolbar) for running commands directly on the remote host, with ANSI escape codes filtered out for clean plain-text output.
 - **Task manager** — a Windows Task Manager–style window (Task Manager button in the toolbar) listing remote processes (Name, PID, User, Status, CPU%, Memory) via `ps` over SSH, sortable by column, searchable by name/PID, auto-refreshing every 2 seconds, with an End Task button (`kill -9`) behind a confirmation dialog.
 - **Custom dark/light UI** — undecorated window with our own title bar (drag to move, minimize/maximize/close) instead of the native OS chrome, plus a light/dark theme toggle button that persists across restarts and is applied consistently across every window and dialog.
@@ -31,6 +32,7 @@ Early v1 in active development. The login window, SSH/SFTP connection, remote fo
 - No window edge-resizing yet (undecorated window can still be maximized/minimized/moved, just not resized by dragging an edge).
 - Single saved profile only — no multi-profile management UI yet.
 - SFTP has no server-side copy command, so Paste streams file bytes through the client; large files/directories will be slower than a native `cp` on the server.
+- Upload/Download has no progress bar, pause/resume, or parallel streams — it's a single blocking transfer per file with only a status-bar message until it finishes.
 - The terminal is a simple line-based PTY console, not a full terminal emulator — full-screen interactive programs (vim, top, less) won't render correctly in it.
 
 ## Getting started

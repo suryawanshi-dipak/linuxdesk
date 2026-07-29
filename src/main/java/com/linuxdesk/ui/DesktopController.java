@@ -26,8 +26,12 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.DirectoryChooser;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 
+import java.io.File;
 import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.Deque;
@@ -92,9 +96,134 @@ public class DesktopController {
         MenuItem terminalItem = new MenuItem("Open Terminal Here");
         terminalItem.setOnAction(e -> openTerminalWindow(currentPath));
 
-        menu.getItems().addAll(refreshItem, sortMenu, newMenu, new SeparatorMenuItem(),
+        Menu uploadMenu = new Menu("Upload");
+        MenuItem uploadFileItem = new MenuItem("File...");
+        uploadFileItem.setOnAction(e -> uploadLocalFile());
+        MenuItem uploadFolderItem = new MenuItem("Folder...");
+        uploadFolderItem.setOnAction(e -> uploadLocalFolder());
+        uploadMenu.getItems().addAll(uploadFileItem, uploadFolderItem);
+
+        menu.getItems().addAll(refreshItem, sortMenu, newMenu, uploadMenu, new SeparatorMenuItem(),
                 pasteItem, terminalItem);
         return menu;
+    }
+
+    private void uploadLocalFile() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Upload File");
+        File file = chooser.showOpenDialog(ownerWindow());
+        if (file != null) {
+            startUpload(file);
+        }
+    }
+
+    private void uploadLocalFolder() {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Upload Folder");
+        File dir = chooser.showDialog(ownerWindow());
+        if (dir != null) {
+            startUpload(dir);
+        }
+    }
+
+    private void startUpload(File localFile) {
+        String targetDir = currentPath;
+        String remotePath = targetDir.endsWith("/") ? targetDir + localFile.getName() : targetDir + "/" + localFile.getName();
+
+        if (localFile.isDirectory()) {
+            performUpload(localFile, remotePath);
+            return;
+        }
+
+        Thread worker = new Thread(() -> {
+            try {
+                if (sessionManager.exists(remotePath)) {
+                    Platform.runLater(() -> confirmOverwriteUpload(localFile, remotePath));
+                } else {
+                    Platform.runLater(() -> performUpload(localFile, remotePath));
+                }
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Upload failed: " + e.getMessage()));
+            }
+        }, "sftp-upload-check");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void confirmOverwriteUpload(File localFile, String remotePath) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "\"" + localFile.getName() + "\" already exists in this folder. Replace it?",
+                ButtonType.YES, ButtonType.NO);
+        ThemeManager.apply(confirm.getDialogPane());
+        confirm.setHeaderText(null);
+        confirm.showAndWait().ifPresent(button -> {
+            if (button == ButtonType.YES) {
+                performUpload(localFile, remotePath);
+            } else {
+                statusLabel.setText("Upload cancelled.");
+            }
+        });
+    }
+
+    private void performUpload(File localFile, String remotePath) {
+        statusLabel.setText("Uploading " + localFile.getName() + "...");
+
+        Thread worker = new Thread(() -> {
+            try {
+                sessionManager.upload(localFile, remotePath);
+                Platform.runLater(() -> navigateTo(currentPath, false));
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Upload failed: " + e.getMessage()));
+            }
+        }, "sftp-upload");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void downloadEntry(RemoteEntry entry) {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Select Download Destination");
+        File destDir = chooser.showDialog(ownerWindow());
+        if (destDir == null) {
+            return;
+        }
+        File localTarget = new File(destDir, entry.name());
+        if (!localTarget.exists()) {
+            performDownload(entry, localTarget);
+            return;
+        }
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "\"" + entry.name() + "\" already exists at that location. Replace it?",
+                ButtonType.YES, ButtonType.NO);
+        ThemeManager.apply(confirm.getDialogPane());
+        confirm.setHeaderText(null);
+        confirm.showAndWait().ifPresent(button -> {
+            if (button == ButtonType.YES) {
+                performDownload(entry, localTarget);
+            } else {
+                statusLabel.setText("Download cancelled.");
+            }
+        });
+    }
+
+    private void performDownload(RemoteEntry entry, File localTarget) {
+        statusLabel.setText("Downloading " + entry.name() + "...");
+
+        Thread worker = new Thread(() -> {
+            try {
+                sessionManager.download(entry, localTarget);
+                Platform.runLater(() -> statusLabel.setText("Downloaded " + entry.name()));
+            } catch (Exception e) {
+                Platform.runLater(() -> statusLabel.setText("Download failed: " + e.getMessage()));
+            }
+        }, "sftp-download");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private Window ownerWindow() {
+        return iconGrid.getScene().getWindow();
     }
 
     private void applySortMode(SortMode mode) {
@@ -326,7 +455,10 @@ public class DesktopController {
         MenuItem deleteItem = new MenuItem("Delete");
         deleteItem.setOnAction(e -> deleteEntry(entry));
 
-        menu.getItems().addAll(copyItem, pasteItem, renameItem, deleteItem);
+        MenuItem downloadItem = new MenuItem("Download...");
+        downloadItem.setOnAction(e -> downloadEntry(entry));
+
+        menu.getItems().addAll(copyItem, pasteItem, renameItem, deleteItem, new SeparatorMenuItem(), downloadItem);
         return menu;
     }
 
