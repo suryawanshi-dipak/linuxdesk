@@ -4,12 +4,13 @@ A native desktop SSH GUI and remote management workspace built for Linux system 
 
 ## Status
 
-Early v1 in active development. The login window, SSH/SFTP connection, remote folder browser, file editor, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, and a system monitor dashboard are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
+Early v1 in active development. The login window, SSH/SFTP connection, remote folder browser, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, and a system monitor dashboard are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
 
 ## Tech stack
 
 - **Java 21 + JavaFX** — desktop UI
 - **Apache MINA SSHD** — SSH/SFTP client (key-based auth, no external `ssh` binary required)
+- **RichTextFX** — the code editor's syntax highlighting and line numbers (plain JavaFX `TextArea` has no per-character styling API)
 - **Maven** — build
 
 ## What's implemented so far
@@ -19,7 +20,9 @@ Early v1 in active development. The login window, SSH/SFTP connection, remote fo
 - **SSH/SFTP connection** — key-based authentication via Apache MINA SSHD, run off the UI thread so the window never freezes while connecting.
 - **Remote folder browser** — after a successful connection, the user's home directory opens as a desktop-style icon grid (folders/files as icons, double-click to navigate into a folder, Back button, breadcrumb path).
 - **Windows-style taskbar** — a bottom taskbar with a "LinuxDesk" Start button that opens a popup panel (Task Manager, Terminal, Disconnect) anchored above it, plus a compact (220px) Windows-search-style field: typing shows a live dropdown of matches — app commands (Task Manager/Terminal/Disconnect) first, then files/folders in the current directory (icon + name, capped at 20), separated visually — without touching the icon grid behind it. Click a result or press Enter (opens the top match) to run/open it, Escape or clicking away dismisses the dropdown, and it reopens on refocus if there's still a query.
-- **File editor** — double-click a remote text file (up to 2 MB) to open it in a simple text editor window and save changes back over SFTP.
+- **File editor** — double-click a remote text file (up to 2 MB) to open it in a RichTextFX-based code editor with line numbers, save-back-over-SFTP, and:
+  - **Syntax highlighting** — comments/strings/numbers highlighted generically across file types, plus a keyword set for `.java`, `.py`, `.js`/`.ts`, and shell scripts (`.sh`/`.bash`/`.bashrc`/`.profile`). Recomputed 150ms after you stop typing, not on every keystroke.
+  - **Find/Replace** — Ctrl+F opens a bar with Find/Previous/Next, a live match count, Replace/Replace All, and a case-sensitivity toggle; Escape closes it.
 - **File/folder context menu (right-click)** — Copy, Paste, Rename, and Delete on any file or folder. Delete and copy both recurse into directories; paste auto-suffixes `(copy)` on name collisions. Works on any file type, including zips, since copy/delete operate on raw bytes/paths.
 - **Compress / Extract** — "Compress to" (Zip or tar.gz) on any file or folder, and "Extract Here" on recognized archives (`.zip`, `.tar`, `.tar.gz`/`.tgz`, `.tar.bz2`/`.tbz2`, `.tar.xz`/`.txz`), both via the file's context menu. Runs the server's native `zip`/`tar`/`unzip` rather than streaming bytes through the SFTP client, and extraction always lands in a fresh subfolder named after the archive (never directly into the current folder) so any path-traversal entries in a malicious archive stay contained to that subtree. Both prompt for confirmation on a name collision.
 - **Permissions / Ownership** — "Permissions..." on the file context menu opens a chmod/chown dialog: a 9-checkbox rwx matrix plus setuid/setgid/sticky (with tooltips), bidirectionally synced with a live octal field (edit either one, the other updates), a warning that appears for world-writable or setuid-on-executable combinations, owner/group text fields, and (for folders) an "apply recursively" option that first counts affected items (`find | wc -l`) and shows that count in a confirmation before running `chmod`/`chown -R`.
@@ -46,6 +49,7 @@ Early v1 in active development. The login window, SSH/SFTP connection, remote fo
 - The system monitor covers CPU, memory, and disk only — no network throughput, no per-core CPU breakdown, no configurable poll interval (fixed at 2s), and no historical retention beyond the in-window 60 samples (closing the window loses the chart history).
 - Compress/Extract shells out to `zip`/`unzip`/`tar` on the remote host, so it fails with a plain error if those tools aren't installed there. No progress reporting for large archives, no browsing archive contents without extracting, and no password-protected zips.
 - Ownership changes assume passwordless sudo (`sudo -n chown`), same caveat as service control; owner/group are free-text fields rather than pickers populated from the remote host's actual users/groups, and there's no ACL/xattr/SELinux-context support.
+- The editor's syntax highlighting is regex-based, not a real parser — it doesn't understand nested/multi-line constructs beyond `/* */` block comments, and the keyword set only covers Java/Python/JS/shell; other file types still get comment/string/number coloring but no keyword highlighting. Find/Replace is plain substring, not regex.
 
 ## Getting started
 
@@ -77,7 +81,8 @@ src/main/java/com/linuxdesk/
   ui/LoginController.java
   ui/DesktopController.java   # remote folder icon-grid view, taskbar, Start panel, file/folder context menus
   ui/PermissionsDialog.java   # chmod/chown modal dialog
-  ui/EditorController.java    # remote text file viewer/editor
+  ui/EditorController.java    # RichTextFX code editor + find/replace
+  ui/SyntaxHighlighter.java   # regex-based comment/string/number/keyword highlighting
   ui/TerminalController.java  # interactive SSH terminal window
   ui/TaskManagerController.java # merged process/service manager with a view toggle
   ui/LogViewerController.java # journalctl/log file live tail with substring filter

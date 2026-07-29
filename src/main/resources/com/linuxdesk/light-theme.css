@@ -199,21 +199,43 @@
 }
 
 .editor-textarea {
-    -fx-background-color: #f4f5f7;
-}
-
-.editor-textarea .content {
     -fx-background-color: #ffffff;
 }
 
-.editor-textarea .text-area {
-    -fx-text-fill: #1a1d24;
-}
-
-.editor-textarea, .editor-textarea .text-area {
+.code-editor {
+    -fx-background-color: #ffffff;
     -fx-font-family: "Consolas", monospace;
     -fx-font-size: 13px;
-    -fx-text-fill: #1a1d24;
+}
+
+.code-editor .text {
+    -fx-fill: #1a1d24;
+}
+
+.code-editor .lineno {
+    -fx-background-color: #f4f5f7;
+    -fx-text-fill: #9aa0ab;
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-padding: 0 8 0 8;
+}
+
+.code-keyword {
+    -fx-fill: #1d5fb4;
+    -fx-font-weight: bold;
+}
+
+.code-string {
+    -fx-fill: #1f9d55;
+}
+
+.code-comment {
+    -fx-fill: #9aa0ab;
+    -fx-font-style: italic;
+}
+
+.code-number {
+    -fx-fill: #b5680f;
 }
 
 /* ---------- Terminal ---------- */

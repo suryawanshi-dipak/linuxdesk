@@ -2,27 +2,47 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.Label?>
-<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
 
 <BorderPane styleClass="editor-root" xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml" fx:controller="com.linuxdesk.ui.EditorController">
     <top>
-        <HBox spacing="12" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
-            <padding>
-                <Insets top="10" right="16" bottom="10" left="16"/>
-            </padding>
-            <Label fx:id="pathLabel" styleClass="path-label"/>
-            <Region HBox.hgrow="ALWAYS"/>
-            <Label fx:id="statusLabel" styleClass="status-label"/>
-            <Button fx:id="saveButton" text="Save" onAction="#onSave" styleClass="primary-button"/>
-            <Button text="Close" onAction="#onClose" styleClass="secondary-button"/>
-        </HBox>
+        <VBox>
+            <HBox spacing="12" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
+                <padding>
+                    <Insets top="10" right="16" bottom="10" left="16"/>
+                </padding>
+                <Label fx:id="pathLabel" styleClass="path-label"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="statusLabel" styleClass="status-label"/>
+                <Button fx:id="saveButton" text="Save" onAction="#onSave" styleClass="primary-button"/>
+                <Button text="Close" onAction="#onClose" styleClass="secondary-button"/>
+            </HBox>
+            <HBox fx:id="findBar" spacing="8" alignment="CENTER_LEFT" styleClass="desktop-toolbar" visible="false" managed="false">
+                <padding>
+                    <Insets top="8" right="16" bottom="8" left="16"/>
+                </padding>
+                <TextField fx:id="findField" promptText="Find" styleClass="field-input" prefWidth="160"/>
+                <Button text="Previous" onAction="#onFindPrevious" styleClass="secondary-button"/>
+                <Button text="Next" onAction="#onFindNext" styleClass="secondary-button"/>
+                <Label fx:id="matchCountLabel" styleClass="status-label"/>
+                <TextField fx:id="replaceField" promptText="Replace" styleClass="field-input" prefWidth="160"/>
+                <Button text="Replace" onAction="#onReplace" styleClass="secondary-button"/>
+                <Button text="Replace All" onAction="#onReplaceAll" styleClass="secondary-button"/>
+                <CheckBox fx:id="matchCaseCheck" text="Match case"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="✕" onAction="#onCloseFindBar" styleClass="secondary-button"/>
+            </HBox>
+        </VBox>
     </top>
     <center>
-        <TextArea fx:id="contentArea" styleClass="editor-textarea" wrapText="false"/>
+        <StackPane fx:id="editorContainer" styleClass="editor-textarea"/>
     </center>
 </BorderPane>
