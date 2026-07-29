@@ -4,7 +4,7 @@ A native desktop SSH GUI and remote management workspace built for Linux system 
 
 ## Status
 
-Early v1 in active development. The login window with multi-profile management and connection history, SSH/SFTP connection with host key verification, remote folder browser with recent folders/files, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, a system monitor dashboard, and a tamper-evident audit log are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
+Early v1 in active development. The login window with multi-profile management and connection history, SSH/SFTP connection with host key verification, remote folder browser with recent folders/files, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, a system monitor dashboard, and a tamper-evident audit log are built and UI-verified locally, tested end-to-end against a real VM (Oracle VM OCI). Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
 
 ## Tech stack
 
