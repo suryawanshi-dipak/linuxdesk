@@ -10,3 +10,4 @@ public record CpuTimes(long user, long nice, long system, long idle, long iowait
     public long idleAll() {
         return idle + iowait;
     }
+}
