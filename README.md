@@ -4,7 +4,7 @@ A native desktop SSH GUI and remote management workspace built for Linux system 
 
 ## Status
 
-Early v1 in active development. The login window, SSH/SFTP connection, remote folder browser, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, and a system monitor dashboard are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
+Early v1 in active development. The login window, SSH/SFTP connection with host key verification, remote folder browser, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, and a system monitor dashboard are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
 
 ## Tech stack
 
@@ -18,6 +18,7 @@ Early v1 in active development. The login window, SSH/SFTP connection, remote fo
 - **Login window** — Host/IP, port, username, private key file (with file browser), optional passphrase (never persisted), and a live preview of the equivalent `ssh` command.
 - **Saved connection profile** — host/port/username/key path persist to `~/.linuxdesk/profile.properties` between runs (passphrase is always excluded).
 - **SSH/SFTP connection** — key-based authentication via Apache MINA SSHD, run off the UI thread so the window never freezes while connecting.
+- **Host key verification** — trust-on-first-use against a per-user known_hosts store (`~/.linuxdesk/known_hosts`, standard OpenSSH format). First connection to a host shows its SHA-256/MD5 fingerprint and requires explicit "Trust and Connect"; if a previously-trusted host later presents a *different* key, the connection is blocked behind a distinct, harder-to-dismiss warning dialog (default button is Cancel, and the "trust anyway" button stays disabled until you tick a box confirming the change is expected) rather than a routine "click OK" prompt.
 - **Remote folder browser** — after a successful connection, the user's home directory opens as a desktop-style icon grid (folders/files as icons, double-click to navigate into a folder, Back button, breadcrumb path).
 - **Windows-style taskbar** — a bottom taskbar with a "LinuxDesk" Start button that opens a popup panel (Task Manager, Terminal, Disconnect) anchored above it, plus a compact (220px) Windows-search-style field: typing shows a live dropdown of matches — app commands (Task Manager/Terminal/Disconnect) first, then files/folders in the current directory (icon + name, capped at 20), separated visually — without touching the icon grid behind it. Click a result or press Enter (opens the top match) to run/open it, Escape or clicking away dismisses the dropdown, and it reopens on refocus if there's still a query.
 - **File editor** — double-click a remote text file (up to 2 MB) to open it in a RichTextFX-based code editor with line numbers, save-back-over-SFTP, and:
@@ -39,7 +40,7 @@ Early v1 in active development. The login window, SSH/SFTP connection, remote fo
 
 ## Known limitations (by design, for now)
 
-- Host key verification is currently disabled (`AcceptAllServerKeyVerifier`) — accepts any server key. This needs to become a real known_hosts / trust-on-first-use check before pointing it at untrusted networks.
+- Host key verification uses LinuxDesk's own known_hosts store, not `~/.ssh/known_hosts` — it won't see hosts you've already trusted via OpenSSH/PuTTY (and vice versa), and there's no UI yet to view/remove stored entries (`FR-CON-043–044`) or an org-wide strict mode (`FR-CON-045`).
 - No window edge-resizing yet (undecorated window can still be maximized/minimized/moved, just not resized by dragging an edge).
 - Single saved profile only — no multi-profile management UI yet.
 - SFTP has no server-side copy command, so Paste streams file bytes through the client; large files/directories will be slower than a native `cp` on the server.
@@ -69,6 +70,7 @@ src/main/java/com/linuxdesk/
   model/ConnectionProfile.java
   profile/ProfileStore.java   # persists connection details (never the passphrase)
   ssh/SshSessionManager.java  # SSH + SFTP session handling (Apache MINA SSHD)
+  ssh/HostKeyPrompt.java      # callback for TOFU/host-key-changed decisions, implemented by LoginController
   ssh/RemoteEntry.java
   ssh/RemotePermissions.java  # parsed `stat` mode/owner/group for the permissions dialog
   ssh/ArchiveFormat.java      # ZIP / TAR_GZ enum for Compress to

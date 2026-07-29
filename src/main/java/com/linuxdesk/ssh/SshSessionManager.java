@@ -4,9 +4,12 @@ import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.channel.ChannelExec;
 import org.apache.sshd.client.channel.ChannelShell;
 import org.apache.sshd.client.channel.ClientChannelEvent;
-import org.apache.sshd.client.keyverifier.AcceptAllServerKeyVerifier;
+import org.apache.sshd.client.keyverifier.DefaultKnownHostsServerKeyVerifier;
+import org.apache.sshd.client.keyverifier.ServerKeyVerifier;
 import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.common.config.keys.FilePasswordProvider;
+import org.apache.sshd.common.config.keys.KeyUtils;
+import org.apache.sshd.common.digest.BuiltinDigests;
 import org.apache.sshd.common.keyprovider.FileKeyPairProvider;
 import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.SftpClientFactory;
@@ -19,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
@@ -33,26 +37,37 @@ import java.util.concurrent.TimeUnit;
 /**
  * Wraps a single SSH + SFTP session for the connected VM.
  *
- * NOTE: host key verification is currently disabled (AcceptAllServerKeyVerifier).
- * That's a deliberate v1 shortcut to keep the login flow to one step; a real
- * known_hosts / trust-on-first-use prompt should replace it before this talks
- * to anything beyond a host the user already trusts.
+ * Host keys are verified against a per-user known_hosts store at
+ * {@code ~/.linuxdesk/known_hosts} (trust-on-first-use, via {@link #buildServerKeyVerifier}).
  */
 public class SshSessionManager implements AutoCloseable {
+
+    private static final Path KNOWN_HOSTS_FILE =
+            Path.of(System.getProperty("user.home"), ".linuxdesk", "known_hosts");
 
     private SshClient client;
     private ClientSession session;
     private SftpClient sftpClient;
+    private volatile String hostKeyRejectionReason;
 
-    public void connect(String host, int port, String username, String privateKeyPath, String passphrase)
+    public void connect(String host, int port, String username, String privateKeyPath, String passphrase,
+                         HostKeyPrompt hostKeyPrompt)
             throws IOException, GeneralSecurityException {
         client = SshClient.setUpDefaultClient();
-        client.setServerKeyVerifier(AcceptAllServerKeyVerifier.INSTANCE);
+        client.setServerKeyVerifier(buildServerKeyVerifier(host, port, hostKeyPrompt));
         client.start();
 
-        session = client.connect(username, host, port)
-                .verify(15, TimeUnit.SECONDS)
-                .getSession();
+        hostKeyRejectionReason = null;
+        try {
+            session = client.connect(username, host, port)
+                    .verify(15, TimeUnit.SECONDS)
+                    .getSession();
+        } catch (IOException e) {
+            if (hostKeyRejectionReason != null) {
+                throw new IOException(hostKeyRejectionReason, e);
+            }
+            throw e;
+        }
 
         FileKeyPairProvider keyPairProvider = new FileKeyPairProvider(Path.of(privateKeyPath));
         if (passphrase != null && !passphrase.isEmpty()) {
@@ -65,6 +80,36 @@ public class SshSessionManager implements AutoCloseable {
         session.auth().verify(15, TimeUnit.SECONDS);
 
         sftpClient = SftpClientFactory.instance().createSftpClient(session);
+    }
+
+    private ServerKeyVerifier buildServerKeyVerifier(String host, int port, HostKeyPrompt hostKeyPrompt) throws IOException {
+        Files.createDirectories(KNOWN_HOSTS_FILE.getParent());
+
+        ServerKeyVerifier tofuDelegate = (clientSession, remoteAddress, serverKey) -> {
+            String keyType = KeyUtils.getKeyType(serverKey);
+            String sha256 = KeyUtils.getFingerPrint(serverKey);
+            String md5 = KeyUtils.getFingerPrint(BuiltinDigests.md5, serverKey);
+            boolean accepted = hostKeyPrompt.confirmUnknownHost(host, port, keyType, sha256, md5);
+            if (!accepted) {
+                hostKeyRejectionReason = "Connection cancelled: host key for " + host + " was not trusted.";
+            }
+            return accepted;
+        };
+
+        DefaultKnownHostsServerKeyVerifier verifier =
+                new DefaultKnownHostsServerKeyVerifier(tofuDelegate, false, KNOWN_HOSTS_FILE);
+        verifier.setModifiedServerKeyAcceptor((clientSession, remoteAddress, entry, expected, actual) -> {
+            String keyType = KeyUtils.getKeyType(actual);
+            String previousFingerprint = KeyUtils.getFingerPrint(expected);
+            String presentedFingerprint = KeyUtils.getFingerPrint(actual);
+            boolean accepted = hostKeyPrompt.confirmChangedHost(host, port, keyType, previousFingerprint, presentedFingerprint);
+            if (!accepted) {
+                hostKeyRejectionReason = "Connection blocked: the host key for " + host
+                        + " changed and was not accepted.";
+            }
+            return accepted;
+        });
+        return verifier;
     }
 
     public String resolveHomeDirectory() throws IOException {

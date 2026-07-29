@@ -339,6 +339,43 @@
     -fx-background-color: #35b94c;
 }
 
+/* ---------- Host key verification dialogs ---------- */
+
+.host-key-fingerprint {
+    -fx-font-family: "Consolas", monospace;
+    -fx-background-color: #0d1017;
+    -fx-text-fill: #d3d7de;
+    -fx-border-color: #2a2f3a;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 8 10 8 10;
+}
+
+.host-key-warning-text {
+    -fx-text-fill: #e5a13d;
+}
+
+.host-key-dialog.host-key-danger .header-panel {
+    -fx-background-color: #3a1414;
+}
+
+.host-key-dialog.host-key-danger .header-panel .label {
+    -fx-text-fill: #ff6b6b;
+}
+
+.danger-accept-button {
+    -fx-background-color: #7a2118 !important;
+    -fx-text-fill: white !important;
+}
+
+.danger-accept-button:hover:enabled {
+    -fx-background-color: #9c2a1e !important;
+}
+
+.danger-accept-button:disabled {
+    -fx-opacity: 0.5;
+}
+
 /* ---------- Task manager table ---------- */
 
 .task-table {
