@@ -1,6 +1,7 @@
 package com.linuxdesk.ui;
 
 import com.linuxdesk.App;
+import com.linuxdesk.audit.AuditLogStore;
 import com.linuxdesk.model.ConnectionHistoryEntry;
 import com.linuxdesk.model.ConnectionProfile;
 import com.linuxdesk.profile.ConnectionHistoryStore;
@@ -72,6 +73,7 @@ public class LoginController {
 
     private final ProfileStore profileStore = new ProfileStore();
     private final ConnectionHistoryStore historyStore = new ConnectionHistoryStore();
+    private final AuditLogStore auditLogStore = new AuditLogStore();
     private final ObservableList<ConnectionProfile> profiles = FXCollections.observableArrayList();
     private final ObservableList<ConnectionHistoryEntry> historyEntries = FXCollections.observableArrayList();
     private FilteredList<ConnectionProfile> filteredProfiles;
@@ -474,6 +476,7 @@ public class LoginController {
                     profile.getPrivateKeyPath(),
                     profile.getName() == null || profile.getName().isBlank() ? null : profile.getName(),
                     System.currentTimeMillis()));
+            auditLogStore.record(profile.getHost(), profile.getUsername(), "Connect", "success", profile.getName());
 
             Platform.runLater(() -> {
                 try {
@@ -486,6 +489,7 @@ public class LoginController {
                 }
             });
         } catch (Exception e) {
+            auditLogStore.record(profile.getHost(), profile.getUsername(), "Connect", "failure", e.getMessage());
             sessionManager.close();
             Platform.runLater(() -> {
                 showStatus("Connection failed: " + e.getMessage(), true);

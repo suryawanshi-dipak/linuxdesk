@@ -4,7 +4,7 @@ A native desktop SSH GUI and remote management workspace built for Linux system 
 
 ## Status
 
-Early v1 in active development. The login window with multi-profile management and connection history, SSH/SFTP connection with host key verification, remote folder browser with recent folders/files, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, and a system monitor dashboard are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
+Early v1 in active development. The login window with multi-profile management and connection history, SSH/SFTP connection with host key verification, remote folder browser with recent folders/files, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, a system monitor dashboard, and a tamper-evident audit log are built and UI-verified locally, but not yet tested end-to-end against a real VM. Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
 
 ## Tech stack
 
@@ -37,6 +37,7 @@ Early v1 in active development. The login window with multi-profile management a
   - **Services** — systemd units (Name, Active, Sub, Enabled, Description) via `systemctl`, searchable, with Start/Stop/Restart/Enable/Disable actions (via passwordless sudo) behind a confirmation dialog. Stopping, restarting, or disabling `ssh`/`sshd` requires typing the exact unit name to confirm, since that could cut off the SSH session managing it. Loaded lazily on first switching to this view; auto-refresh only runs for the active view.
 - **Log viewer** — a live-tailing window (opened from the Start panel) over either the system journal (`journalctl -f`) or an arbitrary log file path (`tail -F`, so it follows across log rotation by filename). Streams new lines in as they arrive, with a substring filter that re-scans everything already loaded (not just new lines), an auto-scroll toggle, and Start/Stop/Clear controls to restart against a different source.
 - **System monitor** — a dashboard window (opened from the Start panel) polling one batched command every 2 seconds (`/proc/stat`, `free -b`, `df -h`, in a single SSH exec round-trip): live CPU% and Memory% line charts (rolling 2-minute / 60-sample window, CPU computed client-side as a delta between consecutive `/proc/stat` jiffie snapshots), plus a disk usage table (Filesystem/Size/Used/Avail/Use%/Mounted on).
+- **Audit log** — a local, tamper-evident record (opened from the Start panel) of every connect/disconnect, delete, chmod/chown, service start/stop/restart/enable/disable, and process kill LinuxDesk performs, across every host — timestamp, host, remote user, action, outcome (success/failure), and an error excerpt on failure. Each entry's hash covers its own fields plus the previous entry's hash, so a "Verify Integrity" button can detect any edited or deleted line; passwords/passphrases/key material are never logged. Searchable by host/user/action/detail. Stored at `~/.linuxdesk/audit.log`.
 - **Custom dark/light UI** — undecorated window with our own title bar (drag to move, minimize/maximize/close) instead of the native OS chrome, plus a light/dark theme toggle button that persists across restarts and is applied consistently across every window and dialog.
 
 ## Known limitations (by design, for now)
@@ -55,6 +56,7 @@ Early v1 in active development. The login window with multi-profile management a
 - Ownership changes assume passwordless sudo (`sudo -n chown`), same caveat as service control; owner/group are free-text fields rather than pickers populated from the remote host's actual users/groups, and there's no ACL/xattr/SELinux-context support.
 - The editor's syntax highlighting is regex-based, not a real parser — it doesn't understand nested/multi-line constructs beyond `/* */` block comments, and the keyword set only covers Java/Python/JS/shell; other file types still get comment/string/number coloring but no keyword highlighting. Find/Replace is plain substring, not regex.
 - Drag-out to Explorer blocks the UI thread while the file downloads to a temp folder (no progress indicator, and it can be slow for large files); drag-out only works for files, not folders. This is the exact risk the SRS itself flags as the highest-risk drag/drop item — a real virtual-file (delayed-render) drag needs native OS shell integration that JavaFX doesn't provide.
+- The audit log only covers connect/disconnect, delete, chmod/chown, service control, and process kill — not every action (e.g. rename, upload/download, compress/extract, edits made in the file editor aren't logged). It's a local file with `Files.readAllLines`-based tamper detection, not a real database — no retention policy/rotation, no CSV/JSON export, no syslog/SIEM forwarding, and command text/exit codes/durations from the SRS's full record shape aren't captured, just action/outcome/detail.
 
 ## Getting started
 
@@ -74,6 +76,9 @@ src/main/java/com/linuxdesk/
   profile/ProfileStore.java   # persists the named profile list (never the passphrase), migrates the old single-profile store
   profile/ConnectionHistoryStore.java # persists recent successful connections for the login screen's Recent tab
   profile/RecentPathsStore.java # persists recently visited folders/opened files, per host
+  audit/AuditLogEntry.java    # one audit record: host/user/action/outcome/detail + hash chain fields
+  audit/AuditLogStore.java    # append-only, hash-chained audit log persistence and integrity check
+  audit/AuditRecorder.java    # small callback interface so controllers don't depend on AuditLogStore directly
   ssh/SshSessionManager.java  # SSH + SFTP session handling (Apache MINA SSHD)
   ssh/HostKeyPrompt.java      # callback for TOFU/host-key-changed decisions, implemented by LoginController
   ssh/RemoteEntry.java
@@ -96,6 +101,7 @@ src/main/java/com/linuxdesk/
   ui/TaskManagerController.java # merged process/service manager with a view toggle
   ui/LogViewerController.java # journalctl/log file live tail with substring filter
   ui/MonitorController.java   # CPU/memory line charts + disk usage table
+  ui/AuditLogController.java  # searchable audit log table + integrity-check button
   ui/AnsiFilter.java          # strips ANSI escape codes for plain-text terminal output
   ui/TitleBar.java            # custom title bar (drag, min/max/close, theme toggle)
   ui/ThemeManager.java        # light/dark theme switching + persistence (windows, dialogs, popups)
@@ -108,6 +114,7 @@ src/main/resources/com/linuxdesk/
   task-manager.fxml
   log-viewer.fxml
   monitor.fxml
+  audit-log.fxml
   dark-theme.css
   light-theme.css
 ```

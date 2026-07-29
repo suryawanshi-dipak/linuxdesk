@@ -1,5 +1,6 @@
 package com.linuxdesk.ui;
 
+import com.linuxdesk.audit.AuditRecorder;
 import com.linuxdesk.ssh.RemoteEntry;
 import com.linuxdesk.ssh.RemotePermissions;
 import com.linuxdesk.ssh.SshSessionManager;
@@ -29,7 +30,7 @@ final class PermissionsDialog {
     }
 
     static void show(SshSessionManager sessionManager, RemoteEntry entry, Window owner,
-                      Consumer<String> statusUpdater, Runnable onApplied) {
+                      Consumer<String> statusUpdater, Runnable onApplied, AuditRecorder auditRecorder) {
         statusUpdater.accept("Loading permissions for " + entry.name() + "...");
 
         Thread worker = new Thread(() -> {
@@ -37,7 +38,7 @@ final class PermissionsDialog {
                 RemotePermissions current = sessionManager.getPermissions(entry.path());
                 Platform.runLater(() -> {
                     statusUpdater.accept("");
-                    open(sessionManager, entry, owner, current, statusUpdater, onApplied);
+                    open(sessionManager, entry, owner, current, statusUpdater, onApplied, auditRecorder);
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> statusUpdater.accept("Failed to load permissions: " + e.getMessage()));
@@ -48,7 +49,8 @@ final class PermissionsDialog {
     }
 
     private static void open(SshSessionManager sessionManager, RemoteEntry entry, Window owner,
-                              RemotePermissions current, Consumer<String> statusUpdater, Runnable onApplied) {
+                              RemotePermissions current, Consumer<String> statusUpdater, Runnable onApplied,
+                              AuditRecorder auditRecorder) {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.setTitle("Permissions — " + entry.name());
@@ -199,9 +201,10 @@ final class PermissionsDialog {
 
             if (recursive) {
                 confirmRecursiveThenApply(sessionManager, entry, newOctal, newOwner, newGroup,
-                        ownershipChanged, statusUpdater, onApplied);
+                        ownershipChanged, statusUpdater, onApplied, auditRecorder);
             } else {
-                applyChanges(sessionManager, entry, newOctal, newOwner, newGroup, ownershipChanged, false, statusUpdater, onApplied);
+                applyChanges(sessionManager, entry, newOctal, newOwner, newGroup, ownershipChanged, false,
+                        statusUpdater, onApplied, auditRecorder);
             }
         });
     }
@@ -226,7 +229,8 @@ final class PermissionsDialog {
     }
 
     private static void confirmRecursiveThenApply(SshSessionManager sessionManager, RemoteEntry entry, String octal,
-            String owner, String group, boolean ownershipChanged, Consumer<String> statusUpdater, Runnable onApplied) {
+            String owner, String group, boolean ownershipChanged, Consumer<String> statusUpdater, Runnable onApplied,
+            AuditRecorder auditRecorder) {
         statusUpdater.accept("Counting affected items...");
 
         Thread worker = new Thread(() -> {
@@ -246,7 +250,8 @@ final class PermissionsDialog {
                 confirm.setHeaderText(null);
                 confirm.showAndWait().ifPresent(button -> {
                     if (button == ButtonType.YES) {
-                        applyChanges(sessionManager, entry, octal, owner, group, ownershipChanged, true, statusUpdater, onApplied);
+                        applyChanges(sessionManager, entry, octal, owner, group, ownershipChanged, true,
+                                statusUpdater, onApplied, auditRecorder);
                     } else {
                         statusUpdater.accept("Permissions change cancelled.");
                     }
@@ -258,8 +263,12 @@ final class PermissionsDialog {
     }
 
     private static void applyChanges(SshSessionManager sessionManager, RemoteEntry entry, String octal, String owner,
-            String group, boolean ownershipChanged, boolean recursive, Consumer<String> statusUpdater, Runnable onApplied) {
+            String group, boolean ownershipChanged, boolean recursive, Consumer<String> statusUpdater, Runnable onApplied,
+            AuditRecorder auditRecorder) {
         statusUpdater.accept("Applying permissions to " + entry.name() + "...");
+
+        String action = "chmod " + octal + (ownershipChanged ? " / chown " + owner + ":" + group : "")
+                + " on " + entry.path() + (recursive ? " (recursive)" : "");
 
         Thread worker = new Thread(() -> {
             try {
@@ -267,11 +276,13 @@ final class PermissionsDialog {
                 if (ownershipChanged) {
                     sessionManager.setOwnership(entry.path(), owner, group, recursive);
                 }
+                auditRecorder.log(action, "success", null);
                 Platform.runLater(() -> {
                     statusUpdater.accept("Permissions updated.");
                     onApplied.run();
                 });
             } catch (Exception e) {
+                auditRecorder.log(action, "failure", e.getMessage());
                 Platform.runLater(() -> statusUpdater.accept("Permissions update failed: " + e.getMessage()));
             }
         }, "sftp-permissions-apply");

@@ -1,5 +1,6 @@
 package com.linuxdesk.ui;
 
+import com.linuxdesk.audit.AuditRecorder;
 import com.linuxdesk.ssh.RemoteProcess;
 import com.linuxdesk.ssh.RemoteService;
 import com.linuxdesk.ssh.SshSessionManager;
@@ -64,6 +65,7 @@ public class TaskManagerController {
     @FXML private TableColumn<RemoteService, String> descriptionColumn;
 
     private SshSessionManager sessionManager;
+    private AuditRecorder auditRecorder;
     private final ObservableList<RemoteProcess> allProcesses = FXCollections.observableArrayList();
     private final ObservableList<RemoteService> allServices = FXCollections.observableArrayList();
     private FilteredList<RemoteProcess> filteredProcesses;
@@ -72,8 +74,9 @@ public class TaskManagerController {
     private volatile boolean running = true;
     private boolean servicesLoadedOnce = false;
 
-    public void init(SshSessionManager sessionManager, Stage stage) {
+    public void init(SshSessionManager sessionManager, Stage stage, AuditRecorder auditRecorder) {
         this.sessionManager = sessionManager;
+        this.auditRecorder = auditRecorder;
         stage.setTitle("Task Manager");
         stage.addEventFilter(WindowEvent.WINDOW_CLOSE_REQUEST, event -> running = false);
 
@@ -240,11 +243,14 @@ public class TaskManagerController {
             }
             statusLabel.setText("Ending " + selected.command() + "...");
 
+            String action = "Kill process " + selected.pid() + " (" + selected.command() + ")";
             Thread worker = new Thread(() -> {
                 try {
                     sessionManager.killProcess(selected.pid());
+                    auditRecorder.log(action, "success", null);
                     Platform.runLater(this::loadProcesses);
                 } catch (Exception e) {
+                    auditRecorder.log(action, "failure", e.getMessage());
                     Platform.runLater(() -> statusLabel.setText("End task failed: " + e.getMessage()));
                 }
             }, "task-manager-kill");
@@ -328,11 +334,14 @@ public class TaskManagerController {
     private void performServiceAction(RemoteService service, String action) {
         statusLabel.setText(capitalize(action) + "ing " + service.name() + "...");
 
+        String auditAction = capitalize(action) + " service " + service.name();
         Thread worker = new Thread(() -> {
             try {
                 sessionManager.controlService(service.name(), action);
+                auditRecorder.log(auditAction, "success", null);
                 Platform.runLater(this::loadServices);
             } catch (Exception e) {
+                auditRecorder.log(auditAction, "failure", e.getMessage());
                 Platform.runLater(() -> statusLabel.setText(capitalize(action) + " failed: " + e.getMessage()));
             }
         }, "service-" + action);

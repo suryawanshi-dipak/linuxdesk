@@ -1,6 +1,8 @@
 package com.linuxdesk.ui;
 
 import com.linuxdesk.App;
+import com.linuxdesk.audit.AuditLogStore;
+import com.linuxdesk.audit.AuditRecorder;
 import com.linuxdesk.model.ConnectionProfile;
 import com.linuxdesk.profile.RecentPathsStore;
 import com.linuxdesk.ssh.ArchiveFormat;
@@ -70,7 +72,11 @@ public class DesktopController {
     private SshSessionManager sessionManager;
     private boolean production;
     private String hostKey;
+    private String auditHost;
+    private String auditUser;
     private final RecentPathsStore recentPathsStore = new RecentPathsStore();
+    private final AuditLogStore auditLogStore = new AuditLogStore();
+    private final AuditRecorder auditRecorder = this::logAudit;
     private final Deque<String> history = new ArrayDeque<>();
     private String currentPath;
     private RemoteEntry clipboardEntry;
@@ -161,6 +167,7 @@ public class DesktopController {
         addCommandHit(hits, needle, "Terminal", this::onOpenTerminal);
         addCommandHit(hits, needle, "Log Viewer", this::onOpenLogViewer);
         addCommandHit(hits, needle, "Monitor", this::onOpenMonitor);
+        addCommandHit(hits, needle, "Audit Log", this::onOpenAuditLog);
         addCommandHit(hits, needle, "Disconnect", this::onDisconnect);
 
         currentEntries.stream()
@@ -353,13 +360,20 @@ public class DesktopController {
             onOpenMonitor();
         });
 
+        Button auditLogItem = startMenuItem("Audit Log");
+        auditLogItem.setOnAction(e -> {
+            popup.hide();
+            onOpenAuditLog();
+        });
+
         Button disconnectItem = startMenuItem("Disconnect");
         disconnectItem.setOnAction(e -> {
             popup.hide();
             onDisconnect();
         });
 
-        card.getChildren().addAll(taskManagerItem, terminalItem, logViewerItem, monitorItem, new Separator(), disconnectItem);
+        card.getChildren().addAll(taskManagerItem, terminalItem, logViewerItem, monitorItem, auditLogItem,
+                new Separator(), disconnectItem);
         popup.getContent().add(card);
         return popup;
     }
@@ -595,6 +609,8 @@ public class DesktopController {
         this.sessionManager = sessionManager;
         this.production = profile.isProduction();
         this.hostKey = profile.getUsername() + "@" + profile.getHost();
+        this.auditHost = profile.getHost();
+        this.auditUser = profile.getUsername();
         hostLabel.setText(hostKey);
         productionBadge.setVisible(production);
         productionBadge.setManaged(production);
@@ -649,7 +665,7 @@ public class DesktopController {
             taskManagerStage.setScene(scene);
 
             TaskManagerController controller = loader.getController();
-            controller.init(sessionManager, taskManagerStage);
+            controller.init(sessionManager, taskManagerStage, auditRecorder);
 
             taskManagerStage.show();
         } catch (Exception e) {
@@ -700,11 +716,37 @@ public class DesktopController {
     }
 
     private void onDisconnect() {
+        logAudit("Disconnect", "success", null);
         sessionManager.close();
         try {
             App.loadScene("/com/linuxdesk/login.fxml", 1040, 420);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to return to login screen", e);
+        }
+    }
+
+    private void logAudit(String action, String outcome, String detail) {
+        auditLogStore.record(auditHost, auditUser, action, outcome, detail);
+    }
+
+    private void onOpenAuditLog() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/audit-log.fxml"));
+            Parent root = loader.load();
+
+            Scene scene = new Scene(root, 900, 520);
+            ThemeManager.apply(scene);
+
+            Stage auditStage = new Stage();
+            auditStage.initOwner(iconGrid.getScene().getWindow());
+            auditStage.setScene(scene);
+
+            AuditLogController controller = loader.getController();
+            controller.init(auditStage);
+
+            auditStage.show();
+        } catch (Exception e) {
+            statusLabel.setText("Failed to open audit log: " + e.getMessage());
         }
     }
 
@@ -875,7 +917,7 @@ public class DesktopController {
 
         MenuItem permissionsItem = new MenuItem("Permissions...");
         permissionsItem.setOnAction(e -> PermissionsDialog.show(sessionManager, entry, ownerWindow(),
-                statusLabel::setText, () -> navigateTo(currentPath, false)));
+                statusLabel::setText, () -> navigateTo(currentPath, false), auditRecorder));
 
         Menu compressMenu = new Menu("Compress to");
         MenuItem zipItem = new MenuItem("Zip");
@@ -1158,9 +1200,11 @@ public class DesktopController {
     private void performDelete(RemoteEntry entry) {
         statusLabel.setText("Deleting " + entry.name() + "...");
 
+        String kind = entry.directory() ? "folder" : "file";
         Thread worker = new Thread(() -> {
             try {
                 sessionManager.delete(entry);
+                logAudit("Delete " + kind + " " + entry.path(), "success", null);
                 Platform.runLater(() -> {
                     if (entry.equals(clipboardEntry)) {
                         clipboardEntry = null;
@@ -1168,6 +1212,7 @@ public class DesktopController {
                     navigateTo(currentPath, false);
                 });
             } catch (Exception e) {
+                logAudit("Delete " + kind + " " + entry.path(), "failure", e.getMessage());
                 Platform.runLater(() -> statusLabel.setText("Delete failed: " + e.getMessage()));
             }
         }, "sftp-delete");
