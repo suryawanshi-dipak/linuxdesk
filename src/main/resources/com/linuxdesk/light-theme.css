@@ -689,3 +689,24 @@
     -fx-text-fill: #b5680f;
     -fx-font-size: 11px;
 }
+
+/* ---------- Deploy compare ---------- */
+
+.table-cell.diff-status-identical {
+    -fx-text-fill: #6b7280;
+}
+
+.table-cell.diff-status-modified {
+    -fx-text-fill: #b5680f;
+    -fx-font-weight: bold;
+}
+
+.table-cell.diff-status-local-only {
+    -fx-text-fill: #3d7bd9;
+    -fx-font-weight: bold;
+}
+
+.table-cell.diff-status-remote-only {
+    -fx-text-fill: #1f9d55;
+    -fx-font-weight: bold;
+}

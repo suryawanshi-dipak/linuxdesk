@@ -190,10 +190,10 @@ public class SshSessionManager implements AutoCloseable {
             if (name.equals(".") || name.equals("..")) {
                 continue;
             }
-            boolean isDir = dirEntry.getAttributes().isDirectory();
-            long size = dirEntry.getAttributes().getSize();
+            SftpClient.Attributes attrs = dirEntry.getAttributes();
+            boolean isDir = attrs.isDirectory();
             String childPath = path.endsWith("/") ? path + name : path + "/" + name;
-            entries.add(new RemoteEntry(name, childPath, isDir, size));
+            entries.add(new RemoteEntry(name, childPath, isDir, attrs.getSize(), attrs.getModifyTime().toMillis()));
         }
         entries.sort((a, b) -> {
             if (a.directory() != b.directory()) {
@@ -202,6 +202,31 @@ public class SshSessionManager implements AutoCloseable {
             return a.name().compareToIgnoreCase(b.name());
         });
         return entries;
+    }
+
+    /** Recursively lists every file (not directories) under {@code rootPath}, for local↔remote comparison. */
+    public List<RemoteEntry> listTreeRecursive(String rootPath) throws IOException {
+        List<RemoteEntry> files = new ArrayList<>();
+        if (exists(rootPath)) {
+            collectTreeFiles(rootPath, files);
+        }
+        return files;
+    }
+
+    private void collectTreeFiles(String path, List<RemoteEntry> out) throws IOException {
+        for (SftpClient.DirEntry dirEntry : sftpClient.readDir(path)) {
+            String name = dirEntry.getFilename();
+            if (name.equals(".") || name.equals("..")) {
+                continue;
+            }
+            SftpClient.Attributes attrs = dirEntry.getAttributes();
+            String childPath = path.endsWith("/") ? path + name : path + "/" + name;
+            if (attrs.isDirectory()) {
+                collectTreeFiles(childPath, out);
+            } else {
+                out.add(new RemoteEntry(name, childPath, false, attrs.getSize(), attrs.getModifyTime().toMillis()));
+            }
+        }
     }
 
     public String readFile(String path) throws IOException {
@@ -222,7 +247,7 @@ public class SshSessionManager implements AutoCloseable {
         SftpClient.Attributes attrs = sftpClient.stat(path);
         int lastSlash = path.lastIndexOf('/');
         String name = lastSlash >= 0 && lastSlash < path.length() - 1 ? path.substring(lastSlash + 1) : path;
-        return new RemoteEntry(name, path, attrs.isDirectory(), attrs.getSize());
+        return new RemoteEntry(name, path, attrs.isDirectory(), attrs.getSize(), attrs.getModifyTime().toMillis());
     }
 
     public boolean exists(String path) {

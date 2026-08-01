@@ -167,6 +167,7 @@ public class DesktopController {
         addCommandHit(hits, needle, "Terminal", this::onOpenTerminal);
         addCommandHit(hits, needle, "Log Viewer", this::onOpenLogViewer);
         addCommandHit(hits, needle, "Monitor", this::onOpenMonitor);
+        addCommandHit(hits, needle, "Deploy", this::onOpenDeploy);
         addCommandHit(hits, needle, "Audit Log", this::onOpenAuditLog);
         addCommandHit(hits, needle, "Disconnect", this::onDisconnect);
 
@@ -360,6 +361,12 @@ public class DesktopController {
             onOpenMonitor();
         });
 
+        Button deployItem = startMenuItem("Deploy");
+        deployItem.setOnAction(e -> {
+            popup.hide();
+            onOpenDeploy();
+        });
+
         Button auditLogItem = startMenuItem("Audit Log");
         auditLogItem.setOnAction(e -> {
             popup.hide();
@@ -372,8 +379,8 @@ public class DesktopController {
             onDisconnect();
         });
 
-        card.getChildren().addAll(taskManagerItem, terminalItem, logViewerItem, monitorItem, auditLogItem,
-                new Separator(), disconnectItem);
+        card.getChildren().addAll(taskManagerItem, terminalItem, logViewerItem, monitorItem, deployItem,
+                auditLogItem, new Separator(), disconnectItem);
         popup.getContent().add(card);
         return popup;
     }
@@ -712,6 +719,27 @@ public class DesktopController {
             monitorStage.show();
         } catch (Exception e) {
             statusLabel.setText("Failed to open monitor: " + e.getMessage());
+        }
+    }
+
+    private void onOpenDeploy() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/deploy.fxml"));
+            Parent root = loader.load();
+
+            Scene scene = new Scene(root, 900, 560);
+            ThemeManager.apply(scene);
+
+            Stage deployStage = new Stage();
+            deployStage.initOwner(iconGrid.getScene().getWindow());
+            deployStage.setScene(scene);
+
+            DeployController controller = loader.getController();
+            controller.init(sessionManager, deployStage, currentPath);
+
+            deployStage.show();
+        } catch (Exception e) {
+            statusLabel.setText("Failed to open deploy: " + e.getMessage());
         }
     }
 
