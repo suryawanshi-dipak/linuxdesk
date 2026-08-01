@@ -9,13 +9,14 @@ Early v1 in active development. The login window with multi-profile management a
 ## Tech stack
 
 - **Java 21 + JavaFX** — desktop UI
-- **Apache MINA SSHD** — SSH/SFTP client (key-based auth, no external `ssh` binary required)
+- **Apache MINA SSHD** — SSH/SFTP client (key- or password-based auth, no external `ssh` binary required)
+- **BouncyCastle + net.i2p.crypto:eddsa** — widen private-key format support beyond what the JDK's own providers parse (RSA/ECDSA/Ed25519/DSA, PEM/PKCS#1/PKCS#8, OpenSSH format, encrypted or not)
 - **RichTextFX** — the code editor's syntax highlighting and line numbers (plain JavaFX `TextArea` has no per-character styling API)
 - **Maven** — build
 
 ## What's implemented so far
 
-- **Login window** — Host/IP, port, username, private key file (with file browser), optional passphrase (never persisted), and a live preview of the equivalent `ssh` command.
+- **Login window** — Host/IP, port, username, a Private Key / Password toggle for the auth method, private key file (with file browser) with optional passphrase or a plain password (neither ever persisted), and a live preview of the equivalent `ssh` command. Selecting a `.pub` file or a nonexistent key path fails fast with a clear message instead of a raw SSH exception. The client is explicitly configured to use *only* the credential entered in the form — Apache MINA SSHD's default behavior of also trying the user's `~/.ssh/id_*` files (mirroring the `ssh` CLI) is disabled, so a wrong password can't silently "succeed" via an unrelated key.
 - **Multi-profile management** — a sidebar lists every saved profile (colour dot + name + PROD badge), with an incremental search box and New/Duplicate/Delete actions. Each profile has a name, colour tag (6-swatch picker), and a Production flag, persisted to `~/.linuxdesk/profiles.properties` (passphrase always excluded); the last-used profile is reselected automatically on the next launch. An old single-profile `profile.properties` from before this feature is migrated in automatically as a "Default" profile the first time the app runs. A profile marked Production shows a red "PRODUCTION" badge in the desktop toolbar once connected, and recursive folder deletes on that connection require typing the folder's name to confirm instead of a plain Yes/No click.
 - **Connection history & recent items** — the login sidebar toggles between "Profiles" and "Recent": the latter lists the last 20 successful connections (deduped by host/port/username, newest first, relative timestamps like "2h ago"), where selecting one and clicking "Reconnect" fills the form and connects in one action; "Remove"/"Clear All" delete individual or all entries. Once connected, clearing the desktop search box (or focusing it while empty) shows up to 15 recently visited folders and 15 recently opened files *for that host*, one click to jump back in, with a "Clear recent items" option — all persisted to `~/.linuxdesk/history.properties` and `~/.linuxdesk/recent.properties`.
 - **SSH/SFTP connection** — key-based authentication via Apache MINA SSHD, run off the UI thread so the window never freezes while connecting.
@@ -42,6 +43,7 @@ Early v1 in active development. The login window with multi-profile management a
 
 ## Known limitations (by design, for now)
 
+- Only private-key and plain-password authentication are supported — no keyboard-interactive/MFA (`FR-CON-023–024`), SSH agent/Pageant integration (`FR-CON-025–026`), or OpenSSH certificate auth (`FR-CON-027`).
 - Host key verification uses LinuxDesk's own known_hosts store, not `~/.ssh/known_hosts` — it won't see hosts you've already trusted via OpenSSH/PuTTY (and vice versa), and there's no UI yet to view/remove stored entries (`FR-CON-043–044`) or an org-wide strict mode (`FR-CON-045`).
 - No window edge-resizing yet (undecorated window can still be maximized/minimized/moved, just not resized by dragging an edge).
 - Profiles are a flat list — no nested folders/groups, free-form tags, or a health/reachability indicator (`FR-CON-052–053, 060`). No import from PuTTY/WinSCP/`~/.ssh/config`/Termius, no encrypted export (`FR-CON-057–058`). The Production flag only gates recursive folder deletes; it doesn't (yet) extend to service stop/restart or package removal, and there's no title-bar-wide red tint — just a toolbar badge.

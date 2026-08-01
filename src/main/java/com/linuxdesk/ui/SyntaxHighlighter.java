@@ -70,10 +70,16 @@ final class SyntaxHighlighter {
 
     private static Pattern buildPattern(String[] keywords) {
         String keywordPattern = keywords.length > 0 ? "\\b(" + String.join("|", keywords) + ")\\b" : "\\b\\B";
+        // STRING and COMMENT avoid repeating a capturing alternation group with `*`
+        // (e.g. the old `([^"\\]|\\.)*`) — Java's regex engine matches that recursively,
+        // one stack frame per character, and a long line or an unterminated quote/comment
+        // blows the stack (StackOverflowError) instead of just failing to match. The
+        // "unrolled loop" form below (plain char-class run, then optional escape, repeated)
+        // and the scoped-dotall `.*?` are both flat/iterative instead.
         return Pattern.compile(
                 "(?<KEYWORD>" + keywordPattern + ")"
-                        + "|(?<STRING>\"([^\"\\\\]|\\\\.)*\"|'([^'\\\\]|\\\\.)*')"
-                        + "|(?<COMMENT>//[^\n]*|#[^\n]*|/\\*(?:.|\\R)*?\\*/)"
+                        + "|(?<STRING>\"[^\"\\\\\\n]*(?:\\\\.[^\"\\\\\\n]*)*\"|'[^'\\\\\\n]*(?:\\\\.[^'\\\\\\n]*)*')"
+                        + "|(?<COMMENT>//[^\n]*|#[^\n]*|/\\*(?s:.*?)\\*/)"
                         + "|(?<NUMBER>\\b\\d+(?:\\.\\d+)?\\b)");
     }
 

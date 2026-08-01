@@ -79,21 +79,37 @@
                     </VBox>
                 </HBox>
 
-                <HBox spacing="20">
-                    <VBox spacing="6" HBox.hgrow="ALWAYS">
-                        <Label text="Private key file" styleClass="field-label"/>
-                        <HBox spacing="8">
-                            <TextField fx:id="keyPathField" promptText="C:\Users\you\.ssh\id_ed25519"
-                                       styleClass="field-input" HBox.hgrow="ALWAYS"/>
-                            <Button fx:id="browseButton" text="Browse..." onAction="#onBrowseKey"
-                                    styleClass="secondary-button"/>
-                        </HBox>
-                    </VBox>
-                    <VBox spacing="6" HBox.hgrow="ALWAYS">
-                        <Label text="Key passphrase (optional, never saved)" styleClass="field-label"/>
-                        <PasswordField fx:id="passphraseField" styleClass="field-input"/>
-                    </VBox>
-                </HBox>
+                <VBox spacing="10">
+                    <HBox spacing="0" styleClass="sidebar-toggle-row" maxWidth="260">
+                        <ToggleButton fx:id="keyAuthToggle" text="Private Key" selected="true"
+                                      styleClass="sidebar-toggle-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <ToggleButton fx:id="passwordAuthToggle" text="Password"
+                                      styleClass="sidebar-toggle-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    </HBox>
+
+                    <HBox fx:id="keyAuthRow" spacing="20">
+                        <VBox spacing="6" HBox.hgrow="ALWAYS">
+                            <Label text="Private key file" styleClass="field-label"/>
+                            <HBox spacing="8">
+                                <TextField fx:id="keyPathField" promptText="C:\Users\you\.ssh\id_ed25519"
+                                           styleClass="field-input" HBox.hgrow="ALWAYS"/>
+                                <Button fx:id="browseButton" text="Browse..." onAction="#onBrowseKey"
+                                        styleClass="secondary-button"/>
+                            </HBox>
+                        </VBox>
+                        <VBox spacing="6" HBox.hgrow="ALWAYS">
+                            <Label text="Key passphrase (optional, never saved)" styleClass="field-label"/>
+                            <PasswordField fx:id="passphraseField" styleClass="field-input"/>
+                        </VBox>
+                    </HBox>
+
+                    <HBox fx:id="passwordAuthRow" spacing="20" visible="false" managed="false">
+                        <VBox spacing="6" HBox.hgrow="ALWAYS">
+                            <Label text="Password (never saved)" styleClass="field-label"/>
+                            <PasswordField fx:id="loginPasswordField" styleClass="field-input"/>
+                        </VBox>
+                    </HBox>
+                </VBox>
 
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <Label text="EQUIVALENT TO" styleClass="equivalent-tag"/>

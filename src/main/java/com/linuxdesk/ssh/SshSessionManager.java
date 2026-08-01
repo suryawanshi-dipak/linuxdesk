@@ -4,15 +4,18 @@ import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.channel.ChannelExec;
 import org.apache.sshd.client.channel.ChannelShell;
 import org.apache.sshd.client.channel.ClientChannelEvent;
+import org.apache.sshd.client.config.hosts.HostConfigEntryResolver;
 import org.apache.sshd.client.keyverifier.DefaultKnownHostsServerKeyVerifier;
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier;
 import org.apache.sshd.client.session.ClientSession;
+import org.apache.sshd.common.keyprovider.KeyIdentityProvider;
 import org.apache.sshd.common.config.keys.FilePasswordProvider;
 import org.apache.sshd.common.config.keys.KeyUtils;
 import org.apache.sshd.common.digest.BuiltinDigests;
 import org.apache.sshd.common.keyprovider.FileKeyPairProvider;
 import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.SftpClientFactory;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -26,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -39,22 +43,46 @@ import java.util.concurrent.TimeUnit;
  *
  * Host keys are verified against a per-user known_hosts store at
  * {@code ~/.linuxdesk/known_hosts} (trust-on-first-use, via {@link #buildServerKeyVerifier}).
+ *
+ * Supports two auth methods: a private key file (any format Apache MINA SSHD / BouncyCastle can
+ * parse — OpenSSH, PEM/PKCS#1, PKCS#8, RSA/ECDSA/Ed25519/DSA, encrypted or not) or a plain
+ * password. Which one is used is inferred from which credential the caller supplies.
  */
 public class SshSessionManager implements AutoCloseable {
 
     private static final Path KNOWN_HOSTS_FILE =
             Path.of(System.getProperty("user.home"), ".linuxdesk", "known_hosts");
 
+    static {
+        // Apache MINA SSHD's own format/algorithm detection is unreliable across JDKs for some
+        // key types; registering BouncyCastle explicitly gives it a provider it always trusts,
+        // widening supported private-key formats beyond the JDK-native default.
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
+    }
+
     private SshClient client;
     private ClientSession session;
     private SftpClient sftpClient;
     private volatile String hostKeyRejectionReason;
 
+    /**
+     * Connects and authenticates. If {@code password} is non-blank, password authentication is
+     * used and {@code privateKeyPath}/{@code passphrase} are ignored; otherwise the private key
+     * at {@code privateKeyPath} is used (decrypted with {@code passphrase} if it's encrypted).
+     */
     public void connect(String host, int port, String username, String privateKeyPath, String passphrase,
-                         HostKeyPrompt hostKeyPrompt)
+                         String password, HostKeyPrompt hostKeyPrompt)
             throws IOException, GeneralSecurityException {
         client = SshClient.setUpDefaultClient();
         client.setServerKeyVerifier(buildServerKeyVerifier(host, port, hostKeyPrompt));
+        // Without this, MINA SSHD mirrors the `ssh` CLI's default IdentityFile behavior and
+        // silently tries the user's ~/.ssh/id_* files in addition to whatever credentials we
+        // explicitly supply below — meaning a wrong password could "succeed" via an unrelated
+        // key. We want strictly only the credential the user entered in the UI.
+        client.setHostConfigEntryResolver(HostConfigEntryResolver.EMPTY);
+        client.setKeyIdentityProvider(KeyIdentityProvider.EMPTY_KEYS_PROVIDER);
         client.start();
 
         hostKeyRejectionReason = null;
@@ -69,17 +97,56 @@ public class SshSessionManager implements AutoCloseable {
             throw e;
         }
 
-        FileKeyPairProvider keyPairProvider = new FileKeyPairProvider(Path.of(privateKeyPath));
-        if (passphrase != null && !passphrase.isEmpty()) {
-            keyPairProvider.setPasswordFinder(FilePasswordProvider.of(passphrase));
-        }
-        for (KeyPair keyPair : keyPairProvider.loadKeys(session)) {
-            session.addPublicKeyIdentity(keyPair);
+        if (password != null && !password.isEmpty()) {
+            session.addPasswordIdentity(password);
+        } else {
+            loadPrivateKeyIdentity(session, privateKeyPath, passphrase);
         }
 
         session.auth().verify(15, TimeUnit.SECONDS);
 
         sftpClient = SftpClientFactory.instance().createSftpClient(session);
+    }
+
+    private void loadPrivateKeyIdentity(ClientSession session, String privateKeyPath, String passphrase)
+            throws IOException, GeneralSecurityException {
+        if (privateKeyPath == null || privateKeyPath.isBlank()) {
+            throw new IOException("No private key file selected.");
+        }
+        Path keyPath = Path.of(privateKeyPath);
+        if (!Files.isRegularFile(keyPath)) {
+            throw new IOException("Private key file not found: " + privateKeyPath);
+        }
+        if (looksLikePublicKey(keyPath)) {
+            throw new IOException("\"" + keyPath.getFileName() + "\" looks like a public key, not a private key. "
+                    + "Select the matching private key file instead (usually the same name without \".pub\").");
+        }
+
+        FileKeyPairProvider keyPairProvider = new FileKeyPairProvider(keyPath);
+        if (passphrase != null && !passphrase.isEmpty()) {
+            keyPairProvider.setPasswordFinder(FilePasswordProvider.of(passphrase));
+        }
+        int loaded = 0;
+        for (KeyPair keyPair : keyPairProvider.loadKeys(session)) {
+            session.addPublicKeyIdentity(keyPair);
+            loaded++;
+        }
+        if (loaded == 0) {
+            throw new IOException("Could not read a usable key from \"" + keyPath.getFileName() + "\". "
+                    + "Check it's a supported private key format (OpenSSH, PEM/PKCS#1, or PKCS#8) and, "
+                    + "if it's encrypted, that the passphrase is correct.");
+        }
+    }
+
+    /** Public key files start with a type marker like "ssh-ed25519 AAAA..." on their first line. */
+    private static boolean looksLikePublicKey(Path keyPath) throws IOException {
+        String firstLine;
+        try (var lines = Files.lines(keyPath, StandardCharsets.UTF_8)) {
+            firstLine = lines.filter(l -> !l.isBlank()).findFirst().orElse("").trim();
+        }
+        return firstLine.startsWith("ssh-rsa ") || firstLine.startsWith("ssh-ed25519 ")
+                || firstLine.startsWith("ssh-dss ") || firstLine.startsWith("ecdsa-sha2-")
+                || firstLine.startsWith("sk-ssh-ed25519@") || firstLine.startsWith("sk-ecdsa-sha2-");
     }
 
     private ServerKeyVerifier buildServerKeyVerifier(String host, int port, HostKeyPrompt hostKeyPrompt) throws IOException {

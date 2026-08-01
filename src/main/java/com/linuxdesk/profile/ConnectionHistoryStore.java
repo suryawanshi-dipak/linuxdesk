@@ -1,6 +1,7 @@
 package com.linuxdesk.profile;
 
 import com.linuxdesk.model.ConnectionHistoryEntry;
+import com.linuxdesk.model.ConnectionProfile.AuthMethod;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,6 +33,7 @@ public class ConnectionHistoryStore {
                     props.getProperty(i + ".host", ""),
                     parseInt(props.getProperty(i + ".port", "22")),
                     props.getProperty(i + ".username", ""),
+                    parseAuthMethod(props.getProperty(i + ".authMethod", "")),
                     props.getProperty(i + ".privateKeyPath", ""),
                     blankToNull(props.getProperty(i + ".profileName", "")),
                     parseLong(props.getProperty(i + ".timestamp", "0"))));
@@ -71,6 +73,7 @@ public class ConnectionHistoryStore {
             props.setProperty(i + ".host", e.host());
             props.setProperty(i + ".port", String.valueOf(e.port()));
             props.setProperty(i + ".username", e.username());
+            props.setProperty(i + ".authMethod", e.authMethod().name());
             props.setProperty(i + ".privateKeyPath", e.privateKeyPath() == null ? "" : e.privateKeyPath());
             props.setProperty(i + ".profileName", e.profileName() == null ? "" : e.profileName());
             props.setProperty(i + ".timestamp", String.valueOf(e.timestamp()));
@@ -95,6 +98,14 @@ public class ConnectionHistoryStore {
             return Long.parseLong(value.trim());
         } catch (NumberFormatException e) {
             return 0L;
+        }
+    }
+
+    private static AuthMethod parseAuthMethod(String value) {
+        try {
+            return AuthMethod.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return AuthMethod.PRIVATE_KEY;
         }
     }
 

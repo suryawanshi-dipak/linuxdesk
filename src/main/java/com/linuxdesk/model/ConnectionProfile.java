@@ -6,11 +6,17 @@ public class ConnectionProfile {
 
     public static final String DEFAULT_COLOR = "#8b93a3";
 
+    public enum AuthMethod {
+        PRIVATE_KEY,
+        PASSWORD
+    }
+
     private String id = UUID.randomUUID().toString();
     private String name = "";
     private String host = "";
     private int port = 22;
     private String username = "";
+    private AuthMethod authMethod = AuthMethod.PRIVATE_KEY;
     private String privateKeyPath = "";
     private String colorTag = DEFAULT_COLOR;
     private boolean production;
@@ -55,6 +61,14 @@ public class ConnectionProfile {
         this.username = username;
     }
 
+    public AuthMethod getAuthMethod() {
+        return authMethod;
+    }
+
+    public void setAuthMethod(AuthMethod authMethod) {
+        this.authMethod = authMethod == null ? AuthMethod.PRIVATE_KEY : authMethod;
+    }
+
     public String getPrivateKeyPath() {
         return privateKeyPath;
     }
@@ -94,6 +108,7 @@ public class ConnectionProfile {
         copy.setHost(host);
         copy.setPort(port);
         copy.setUsername(username);
+        copy.setAuthMethod(authMethod);
         copy.setPrivateKeyPath(privateKeyPath);
         copy.setColorTag(colorTag);
         copy.setProduction(production);
@@ -102,7 +117,7 @@ public class ConnectionProfile {
 
     public String toSshCommand() {
         StringBuilder sb = new StringBuilder("ssh");
-        if (privateKeyPath != null && !privateKeyPath.isBlank()) {
+        if (authMethod == AuthMethod.PRIVATE_KEY && privateKeyPath != null && !privateKeyPath.isBlank()) {
             sb.append(" -i ").append(privateKeyPath);
         }
         if (port != 22) {

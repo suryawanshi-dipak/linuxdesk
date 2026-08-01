@@ -1,6 +1,7 @@
 package com.linuxdesk.profile;
 
 import com.linuxdesk.model.ConnectionProfile;
+import com.linuxdesk.model.ConnectionProfile.AuthMethod;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -59,6 +60,7 @@ public class ProfileStore {
         props.setProperty(id + ".host", nullToEmpty(profile.getHost()));
         props.setProperty(id + ".port", String.valueOf(profile.getPort()));
         props.setProperty(id + ".username", nullToEmpty(profile.getUsername()));
+        props.setProperty(id + ".authMethod", profile.getAuthMethod().name());
         props.setProperty(id + ".privateKeyPath", nullToEmpty(profile.getPrivateKeyPath()));
         props.setProperty(id + ".colorTag", nullToEmpty(profile.getColorTag()));
         props.setProperty(id + ".production", String.valueOf(profile.isProduction()));
@@ -70,7 +72,7 @@ public class ProfileStore {
         List<String> order = orderedIds(props);
         order.remove(id);
         props.setProperty("order", String.join(",", order));
-        for (String field : new String[] {"name", "host", "port", "username", "privateKeyPath", "colorTag", "production"}) {
+        for (String field : new String[] {"name", "host", "port", "username", "authMethod", "privateKeyPath", "colorTag", "production"}) {
             props.remove(id + "." + field);
         }
         if (id.equals(props.getProperty("lastUsedId"))) {
@@ -110,6 +112,7 @@ public class ProfileStore {
         profile.setHost(props.getProperty(id + ".host", ""));
         profile.setPort(parsePort(props.getProperty(id + ".port", "22")));
         profile.setUsername(props.getProperty(id + ".username", ""));
+        profile.setAuthMethod(parseAuthMethod(props.getProperty(id + ".authMethod", "")));
         profile.setPrivateKeyPath(props.getProperty(id + ".privateKeyPath", ""));
         profile.setColorTag(props.getProperty(id + ".colorTag", ConnectionProfile.DEFAULT_COLOR));
         profile.setProduction(Boolean.parseBoolean(props.getProperty(id + ".production", "false")));
@@ -163,6 +166,14 @@ public class ProfileStore {
             return Integer.parseInt(value.trim());
         } catch (NumberFormatException e) {
             return 22;
+        }
+    }
+
+    private AuthMethod parseAuthMethod(String value) {
+        try {
+            return AuthMethod.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return AuthMethod.PRIVATE_KEY;
         }
     }
 }

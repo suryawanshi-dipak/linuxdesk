@@ -9,7 +9,8 @@ import java.time.Instant;
  * reconnected to standalone, without requiring a matching saved profile.
  */
 public record ConnectionHistoryEntry(
-        String host, int port, String username, String privateKeyPath, String profileName, long timestamp) {
+        String host, int port, String username, ConnectionProfile.AuthMethod authMethod, String privateKeyPath,
+        String profileName, long timestamp) {
 
     public String displayLabel() {
         return (username == null || username.isBlank() ? "user" : username)

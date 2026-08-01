@@ -41,6 +41,36 @@
             <version>${sshd.version}</version>
         </dependency>
 
+        <!-- Apache MINA SSHD's own EdDSA/Ed25519 detection doesn't pick up the JDK's native
+             support reliably in this setup; this explicit provider fixes
+             "NoSuchAlgorithmException: Unsupported key type (ssh-ed25519)". -->
+        <dependency>
+            <groupId>net.i2p.crypto</groupId>
+            <artifactId>eddsa</artifactId>
+            <version>0.3.0</version>
+        </dependency>
+
+        <!-- Broadens private-key format support (PEM/PKCS#1 RSA & EC, PKCS#8, various
+             encryption ciphers) beyond what the JDK's own providers parse. -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.78.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+            <version>1.78.1</version>
+        </dependency>
+
+        <!-- Forces a consistent slf4j-api version: something on the classpath transitively
+             pulls in slf4j-api 1.7.x, which shadows slf4j-simple 2.x's provider lookup and
+             silently drops all logging (including MINA SSHD's) to a no-op. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>2.0.16</version>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>

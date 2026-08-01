@@ -4,6 +4,7 @@ import com.linuxdesk.App;
 import com.linuxdesk.audit.AuditLogStore;
 import com.linuxdesk.model.ConnectionHistoryEntry;
 import com.linuxdesk.model.ConnectionProfile;
+import com.linuxdesk.model.ConnectionProfile.AuthMethod;
 import com.linuxdesk.profile.ConnectionHistoryStore;
 import com.linuxdesk.profile.ProfileStore;
 import com.linuxdesk.ssh.HostKeyPrompt;
@@ -64,8 +65,13 @@ public class LoginController {
     @FXML private TextField hostField;
     @FXML private TextField portField;
     @FXML private TextField usernameField;
+    @FXML private ToggleButton keyAuthToggle;
+    @FXML private ToggleButton passwordAuthToggle;
+    @FXML private HBox keyAuthRow;
+    @FXML private HBox passwordAuthRow;
     @FXML private TextField keyPathField;
     @FXML private PasswordField passphraseField;
+    @FXML private PasswordField loginPasswordField;
     @FXML private Label commandPreviewLabel;
     @FXML private Label statusLabel;
     @FXML private Button testConnectionButton;
@@ -90,6 +96,7 @@ public class LoginController {
     private void initialize() {
         buildColorSwatches();
         setupModeToggle();
+        setupAuthMethodToggle();
         setupProfileList();
 
         for (TextField field : new TextField[]{hostField, portField, usernameField, keyPathField}) {
@@ -163,6 +170,38 @@ public class LoginController {
             deleteProfileButton.setText(showingRecent ? "Clear All" : "Delete");
             refreshButtonStates();
         });
+    }
+
+    private void setupAuthMethodToggle() {
+        ToggleGroup authGroup = new ToggleGroup();
+        keyAuthToggle.setToggleGroup(authGroup);
+        passwordAuthToggle.setToggleGroup(authGroup);
+        authGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
+            if (newToggle == null) {
+                authGroup.selectToggle(oldToggle);
+                return;
+            }
+            boolean usingPassword = newToggle == passwordAuthToggle;
+            keyAuthRow.setVisible(!usingPassword);
+            keyAuthRow.setManaged(!usingPassword);
+            passwordAuthRow.setVisible(usingPassword);
+            passwordAuthRow.setManaged(usingPassword);
+            updateCommandPreview();
+        });
+    }
+
+    private AuthMethod selectedAuthMethod() {
+        return passwordAuthToggle.isSelected() ? AuthMethod.PASSWORD : AuthMethod.PRIVATE_KEY;
+    }
+
+    private void applyAuthMethodToForm(AuthMethod authMethod) {
+        boolean usingPassword = authMethod == AuthMethod.PASSWORD;
+        passwordAuthToggle.setSelected(usingPassword);
+        keyAuthToggle.setSelected(!usingPassword);
+        keyAuthRow.setVisible(!usingPassword);
+        keyAuthRow.setManaged(!usingPassword);
+        passwordAuthRow.setVisible(usingPassword);
+        passwordAuthRow.setManaged(usingPassword);
     }
 
     @SuppressWarnings("unchecked")
@@ -266,8 +305,10 @@ public class LoginController {
         hostField.setText(profile.getHost());
         portField.setText(String.valueOf(profile.getPort()));
         usernameField.setText(profile.getUsername());
+        applyAuthMethodToForm(profile.getAuthMethod());
         keyPathField.setText(profile.getPrivateKeyPath());
         passphraseField.clear();
+        loginPasswordField.clear();
         setSelectedColorTag(profile.getColorTag());
         productionCheck.setSelected(profile.isProduction());
         updateCommandPreview();
@@ -279,8 +320,10 @@ public class LoginController {
         hostField.setText(entry.host());
         portField.setText(String.valueOf(entry.port()));
         usernameField.setText(entry.username());
+        applyAuthMethodToForm(entry.authMethod());
         keyPathField.setText(entry.privateKeyPath());
         passphraseField.clear();
+        loginPasswordField.clear();
         setSelectedColorTag(ConnectionProfile.DEFAULT_COLOR);
         productionCheck.setSelected(false);
         updateCommandPreview();
@@ -358,8 +401,10 @@ public class LoginController {
         hostField.clear();
         portField.setText("22");
         usernameField.clear();
+        applyAuthMethodToForm(AuthMethod.PRIVATE_KEY);
         keyPathField.clear();
         passphraseField.clear();
+        loginPasswordField.clear();
         setSelectedColorTag(ConnectionProfile.DEFAULT_COLOR);
         productionCheck.setSelected(false);
         updateCommandPreview();
@@ -456,24 +501,25 @@ public class LoginController {
     private void onTestConnection() {
         ConnectionProfile profile = currentProfile();
         String passphrase = passphraseField.getText();
+        String password = loginPasswordField.getText();
 
         testConnectionButton.setDisable(true);
         showStatus("Connecting...", false);
 
-        Thread worker = new Thread(() -> attemptConnect(profile, passphrase), "ssh-connect");
+        Thread worker = new Thread(() -> attemptConnect(profile, passphrase, password), "ssh-connect");
         worker.setDaemon(true);
         worker.start();
     }
 
-    private void attemptConnect(ConnectionProfile profile, String passphrase) {
+    private void attemptConnect(ConnectionProfile profile, String passphrase, String password) {
         SshSessionManager sessionManager = new SshSessionManager();
         try {
             sessionManager.connect(profile.getHost(), profile.getPort(), profile.getUsername(),
-                    profile.getPrivateKeyPath(), passphrase, createHostKeyPrompt());
+                    profile.getPrivateKeyPath(), passphrase, password, createHostKeyPrompt());
             String rootPath = sessionManager.resolveHomeDirectory();
             profileStore.setLastUsedId(profile.getId());
             historyStore.record(new ConnectionHistoryEntry(profile.getHost(), profile.getPort(), profile.getUsername(),
-                    profile.getPrivateKeyPath(),
+                    profile.getAuthMethod(), profile.getPrivateKeyPath(),
                     profile.getName() == null || profile.getName().isBlank() ? null : profile.getName(),
                     System.currentTimeMillis()));
             auditLogStore.record(profile.getHost(), profile.getUsername(), "Connect", "success", profile.getName());
@@ -622,6 +668,7 @@ public class LoginController {
         profile.setHost(hostField.getText().trim());
         profile.setPort(parsePort(portField.getText()));
         profile.setUsername(usernameField.getText().trim());
+        profile.setAuthMethod(selectedAuthMethod());
         profile.setPrivateKeyPath(keyPathField.getText().trim());
         profile.setColorTag(selectedColor);
         profile.setProduction(productionCheck.isSelected());
