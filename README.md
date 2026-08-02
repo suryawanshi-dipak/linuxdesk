@@ -80,6 +80,8 @@ Requires JDK 21 and Maven.
 mvn javafx:run
 ```
 
+For a step-by-step walkthrough of actually using every feature (login, file management, the Start panel tools, and the full Deploy workflow including hooks/health checks/rollback), see **[How to Use LinuxDesk](Documentation/How-To-Use-LinuxDesk.md)**.
+
 ## Project layout
 
 ```
