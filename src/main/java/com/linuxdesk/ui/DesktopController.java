@@ -735,7 +735,7 @@ public class DesktopController {
             deployStage.setScene(scene);
 
             DeployController controller = loader.getController();
-            controller.init(sessionManager, deployStage, currentPath);
+            controller.init(sessionManager, deployStage, currentPath, auditHost, production, auditRecorder);
 
             deployStage.show();
         } catch (Exception e) {

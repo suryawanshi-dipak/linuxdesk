@@ -673,6 +673,41 @@ public class SshSessionManager implements AutoCloseable {
         }
     }
 
+    /**
+     * Backs up the given files (paths relative to {@code remoteRoot}) into a single timestamped
+     * tar.gz under {@code remoteRoot}/.linuxdesk-deploy-backups/, before a deploy overwrites them.
+     * Returns the backup's path relative to {@code remoteRoot}, for later {@link #restoreDeployBackup}.
+     */
+    public String backupFilesForDeploy(String remoteRoot, List<String> relativePaths, String timestamp) throws IOException {
+        String backupDir = ".linuxdesk-deploy-backups";
+        String archiveRelativePath = backupDir + "/" + timestamp + ".tar.gz";
+        StringBuilder fileArgs = new StringBuilder();
+        for (String relativePath : relativePaths) {
+            fileArgs.append(' ').append(shellQuote(relativePath));
+        }
+        String command = "mkdir -p " + shellQuote(backupDir) + " && tar -czf " + shellQuote(archiveRelativePath) + fileArgs;
+        CommandResult result = execRaw("cd " + shellQuote(remoteRoot) + " && " + command);
+        if (result.exitStatus() != null && result.exitStatus() != 0) {
+            String message = result.output().trim();
+            throw new IOException(message.isEmpty() ? "backup exited with status " + result.exitStatus() : message);
+        }
+        return archiveRelativePath;
+    }
+
+    /**
+     * Restores a backup created by {@link #backupFilesForDeploy}, overwriting the current files
+     * with the backed-up content. Safe to extract directly in place (unlike {@link #extractArchive})
+     * because we created this archive ourselves with controlled relative paths, not an arbitrary
+     * user-supplied one.
+     */
+    public void restoreDeployBackup(String remoteRoot, String backupRelativePath) throws IOException {
+        CommandResult result = execRaw("cd " + shellQuote(remoteRoot) + " && tar -xzf " + shellQuote(backupRelativePath));
+        if (result.exitStatus() != null && result.exitStatus() != 0) {
+            String message = result.output().trim();
+            throw new IOException(message.isEmpty() ? "restore exited with status " + result.exitStatus() : message);
+        }
+    }
+
     private static String buildExtractCommand(String archivePath) throws IOException {
         String lower = archivePath.toLowerCase(Locale.ROOT);
         String quoted = shellQuote(archivePath);
