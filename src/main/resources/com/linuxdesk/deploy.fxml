@@ -36,6 +36,9 @@
                 <padding>
                     <Insets top="0" right="16" bottom="10" left="16"/>
                 </padding>
+                <Button fx:id="selectAllButton" text="Select All" onAction="#onSelectAll" styleClass="secondary-button"/>
+                <Button fx:id="selectNoneButton" text="Select None" onAction="#onSelectNone" styleClass="secondary-button"/>
+                <Button fx:id="deployButton" text="Deploy Selected" onAction="#onDeploySelected" styleClass="primary-button" disable="true"/>
                 <Region HBox.hgrow="ALWAYS"/>
                 <Label fx:id="statusLabel" styleClass="status-label"/>
             </HBox>

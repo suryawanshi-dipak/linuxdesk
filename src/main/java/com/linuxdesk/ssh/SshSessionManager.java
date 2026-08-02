@@ -356,6 +356,37 @@ public class SshSessionManager implements AutoCloseable {
         }
     }
 
+    /**
+     * Uploads a single local file to an exact remote path, creating any missing remote parent
+     * directories first (`mkdir -p` equivalent). Used by the deploy sync step, where target
+     * subdirectories may not exist yet on a first-time deploy.
+     */
+    public void uploadFileEnsuringParents(File localFile, String remotePath) throws IOException {
+        int lastSlash = remotePath.lastIndexOf('/');
+        if (lastSlash > 0) {
+            ensureRemoteDirectories(remotePath.substring(0, lastSlash));
+        }
+        uploadFile(localFile, remotePath);
+    }
+
+    /** Creates {@code path} and any missing parent directories remotely, tolerating ones that already exist. */
+    public void ensureRemoteDirectories(String path) throws IOException {
+        if (path == null || path.isBlank() || path.equals("/") || exists(path)) {
+            return;
+        }
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash > 0) {
+            ensureRemoteDirectories(path.substring(0, lastSlash));
+        }
+        try {
+            sftpClient.mkdir(path);
+        } catch (IOException e) {
+            if (!exists(path)) {
+                throw e;
+            }
+        }
+    }
+
     private void uploadFile(File localFile, String remotePath) throws IOException {
         try (InputStream in = new FileInputStream(localFile);
              OutputStream out = sftpClient.write(remotePath,
