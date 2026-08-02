@@ -9,11 +9,13 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * A small subset of `.gitignore` syntax (SRS FR-DEP-012): blank lines and `#` comments are
- * skipped, a trailing `/` restricts a pattern to directories, `*`/`?` are glob wildcards, and a
- * pattern containing `/` is anchored to the deploy root while one without matches by name at any
- * depth. No negation (`!`), no `**`, no character classes — a deliberately simple subset, not a
- * full gitignore parser.
+ * A subset of `.gitignore` syntax (SRS FR-DEP-012): blank lines and `#` comments are skipped, a
+ * trailing `/` restricts a pattern to directories, a leading `!` re-includes a path an earlier
+ * pattern excluded (last matching pattern wins, same as git), `**` matches across any number of
+ * path segments while a single `*`/`?` stays within one segment, and a pattern containing `/`
+ * (other than a trailing one) is anchored to the deploy root while one without matches by name at
+ * any depth. No character classes (`[abc]`) — still a deliberately simple subset, not a full
+ * gitignore parser.
  */
 public final class IgnorePatterns {
 
@@ -56,6 +58,10 @@ public final class IgnorePatterns {
             if (line.isEmpty() || line.startsWith("#")) {
                 continue;
             }
+            boolean negated = line.startsWith("!");
+            if (negated) {
+                line = line.substring(1);
+            }
             boolean directoryOnly = line.endsWith("/");
             if (directoryOnly) {
                 line = line.substring(0, line.length() - 1);
@@ -63,21 +69,35 @@ public final class IgnorePatterns {
             if (line.isEmpty()) {
                 continue;
             }
+            // A trailing-slash-stripped pattern with no other '/' isn't "anchored" in the
+            // gitignore sense (e.g. "target/" still matches at any depth, not just the root).
             boolean anchored = line.contains("/");
             String body = line.startsWith("/") ? line.substring(1) : line;
-            compiled.add(new CompiledPattern(globToRegex(body), directoryOnly, anchored));
+            compiled.add(new CompiledPattern(globToRegex(body), directoryOnly, anchored, negated));
         }
         return new IgnorePatterns(compiled);
     }
 
     private static Pattern globToRegex(String glob) {
         StringBuilder sb = new StringBuilder();
-        for (char c : glob.toCharArray()) {
-            switch (c) {
-                case '*' -> sb.append(".*");
-                case '?' -> sb.append('.');
-                case '.', '(', ')', '+', '^', '$', '|', '[', ']', '{', '}', '\\' -> sb.append('\\').append(c);
-                default -> sb.append(c);
+        int i = 0;
+        while (i < glob.length()) {
+            char c = glob.charAt(i);
+            if (c == '*' && i + 1 < glob.length() && glob.charAt(i + 1) == '*') {
+                sb.append(".*"); // crosses path-segment boundaries
+                i += 2;
+            } else if (c == '*') {
+                sb.append("[^/]*"); // stays within one path segment
+                i++;
+            } else if (c == '?') {
+                sb.append("[^/]");
+                i++;
+            } else if (".()+^$|[]{}\\".indexOf(c) >= 0) {
+                sb.append('\\').append(c);
+                i++;
+            } else {
+                sb.append(c);
+                i++;
             }
         }
         return Pattern.compile("^" + sb + "$");
@@ -91,19 +111,21 @@ public final class IgnorePatterns {
         return matches(relativePath, name, false);
     }
 
+    /** Evaluates every applicable pattern in order; the last one that matches decides (negation included). */
     private boolean matches(String relativePath, String name, boolean isDirectory) {
+        boolean ignored = false;
         for (CompiledPattern p : patterns) {
             if (p.directoryOnly() && !isDirectory) {
                 continue;
             }
             String candidate = p.anchored() ? relativePath : name;
             if (p.regex().matcher(candidate).matches()) {
-                return true;
+                ignored = !p.negated();
             }
         }
-        return false;
+        return ignored;
     }
 
-    private record CompiledPattern(Pattern regex, boolean directoryOnly, boolean anchored) {
+    private record CompiledPattern(Pattern regex, boolean directoryOnly, boolean anchored, boolean negated) {
     }
 }

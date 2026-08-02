@@ -733,6 +733,23 @@ public class SshSessionManager implements AutoCloseable {
         return "'" + value.replace("'", "'\\''") + "'";
     }
 
+    /** Runs an arbitrary remote command and returns its output + exit status. Used by deploy hooks and health checks. */
+    public CommandOutcome runCommand(String command) throws IOException {
+        CommandResult result = execRaw(command);
+        return new CommandOutcome(result.output(), result.exitStatus());
+    }
+
+    /** SHA-256 of a remote file's content, via the server's own `sha256sum`. For opt-in checksum-based deploy comparison. */
+    public String sha256(String path) throws IOException {
+        CommandResult result = execRaw("sha256sum " + shellQuote(path));
+        if (result.exitStatus() != null && result.exitStatus() != 0) {
+            throw new IOException("sha256sum failed: " + result.output().trim());
+        }
+        String output = result.output().trim();
+        int spaceIndex = output.indexOf(' ');
+        return spaceIndex > 0 ? output.substring(0, spaceIndex) : output;
+    }
+
     private record CommandResult(String output, Integer exitStatus) {
     }
 

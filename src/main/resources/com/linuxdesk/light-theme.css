@@ -690,6 +690,29 @@
     -fx-font-size: 11px;
 }
 
+/* ---------- Deploy: hooks & health check pane ---------- */
+
+.deploy-advanced-pane > .title {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #2a2d34;
+    -fx-border-color: transparent transparent #e0e2e7 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.deploy-advanced-pane > .title > .text {
+    -fx-fill: #2a2d34;
+}
+
+.deploy-advanced-pane > .title .arrow-button .arrow {
+    -fx-background-color: #6b7280;
+}
+
+.deploy-advanced-pane > *.content {
+    -fx-background-color: #f4f5f7;
+    -fx-border-color: transparent transparent #e0e2e7 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
 /* ---------- Deploy compare ---------- */
 
 .table-cell.diff-status-identical {

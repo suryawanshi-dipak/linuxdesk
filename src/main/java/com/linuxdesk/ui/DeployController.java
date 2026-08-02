@@ -5,7 +5,9 @@ import com.linuxdesk.deploy.DeployBackupRecord;
 import com.linuxdesk.deploy.DeployBackupStore;
 import com.linuxdesk.deploy.DeployComparer;
 import com.linuxdesk.deploy.DeployDiffEntry;
+import com.linuxdesk.deploy.HealthChecker;
 import com.linuxdesk.deploy.IgnorePatterns;
+import com.linuxdesk.ssh.CommandOutcome;
 import com.linuxdesk.ssh.RemoteEntry;
 import com.linuxdesk.ssh.SshSessionManager;
 import javafx.application.Platform;
@@ -18,6 +20,8 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
@@ -40,11 +44,13 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * The Deployment workflow (SRS §5.4): local↔remote comparison, selective sync with a
- * deployment plan shown before executing, automatic backup of overwritten files, one-click
- * rollback to the immediately-previous deployment, dry-run mode, and typed confirmation for
- * Production-tagged targets. Still ahead: pre/post-deploy hooks, health checks, named
- * deployment profiles/history — see the Roadmap wiki page.
+ * The Deployment workflow (SRS §5.4): local↔remote comparison (size-only by default, opt-in
+ * checksum verification), selective sync with a deployment plan shown before executing,
+ * pre/post-deploy hooks, automatic backup of overwritten files with retention (keeps the last
+ * {@link DeployBackupStore#MAX_RETAINED}), rollback to any retained backup, post-deploy health
+ * checks with optional auto-rollback on failure, dry-run mode, and typed confirmation for
+ * Production-tagged targets. Still ahead: named deployment profiles, full deployment history
+ * with compare/repeat, zero-downtime symlink swap — see the Roadmap wiki page.
  */
 public class DeployController {
 
@@ -57,12 +63,21 @@ public class DeployController {
     @FXML private TextField remotePathField;
     @FXML private Label productionBadge;
     @FXML private Button compareButton;
+    @FXML private TextArea ignorePatternsArea;
+    @FXML private TextField preHookField;
+    @FXML private TextField postHookField;
+    @FXML private ChoiceBox<HealthChecker.Type> healthCheckTypeChoice;
+    @FXML private TextField healthCheckTargetField;
+    @FXML private TextField healthCheckExpectedField;
+    @FXML private TextField healthCheckRetriesField;
+    @FXML private TextField healthCheckIntervalField;
+    @FXML private CheckBox autoRollbackCheck;
+    @FXML private CheckBox verifyChecksumsCheck;
     @FXML private Button selectAllButton;
     @FXML private Button selectNoneButton;
     @FXML private CheckBox dryRunCheck;
     @FXML private Button rollbackButton;
     @FXML private Button deployButton;
-    @FXML private TextArea ignorePatternsArea;
     @FXML private Label statusLabel;
 
     @FXML private TableView<DiffRow> diffTable;
@@ -94,6 +109,9 @@ public class DeployController {
         ignorePatternsArea.setText(String.join("\n", IgnorePatterns.DEFAULT_PATTERNS));
         productionBadge.setVisible(production);
         productionBadge.setManaged(production);
+
+        healthCheckTypeChoice.getItems().setAll(HealthChecker.Type.values());
+        healthCheckTypeChoice.setValue(HealthChecker.Type.NONE);
 
         TableColumn<DiffRow, Boolean> selectColumn = new TableColumn<>("");
         selectColumn.setCellValueFactory(data -> data.getValue().selected);
@@ -144,14 +162,16 @@ public class DeployController {
         }
         remoteRoot = remotePath;
         IgnorePatterns ignorePatterns = IgnorePatterns.fromText(ignorePatternsArea.getText());
+        boolean verifyChecksums = verifyChecksumsCheck.isSelected();
 
         setBusy(true);
-        statusLabel.setText("Comparing...");
+        statusLabel.setText(verifyChecksums ? "Comparing (verifying checksums, this is slower)..." : "Comparing...");
         diffRows.clear();
 
         Thread worker = new Thread(() -> {
             try {
-                List<DeployDiffEntry> result = DeployComparer.compare(localRoot, sessionManager, remotePath, ignorePatterns);
+                List<DeployDiffEntry> result =
+                        DeployComparer.compare(localRoot, sessionManager, remotePath, ignorePatterns, verifyChecksums);
                 Platform.runLater(() -> {
                     diffRows.setAll(result.stream().map(DiffRow::new).toList());
                     statusLabel.setText(summaryText(result));
@@ -223,7 +243,20 @@ public class DeployController {
         List<DiffRow> toBackup = toUpload.stream()
                 .filter(row -> row.entry.status() == DeployDiffEntry.Status.MODIFIED)
                 .toList();
-        String plan = buildPlanText(toUpload, toDelete, toBackup);
+
+        DeployRequest request = new DeployRequest(
+                toUpload, toDelete, toBackup,
+                IgnorePatterns.fromText(ignorePatternsArea.getText()),
+                preHookField.getText().trim(),
+                postHookField.getText().trim(),
+                healthCheckTypeChoice.getValue(),
+                healthCheckTargetField.getText().trim(),
+                healthCheckExpectedField.getText().trim(),
+                parseIntOr(healthCheckRetriesField.getText(), 3),
+                parseIntOr(healthCheckIntervalField.getText(), 3),
+                autoRollbackCheck.isSelected());
+
+        String plan = buildPlanText(request);
 
         if (dryRunCheck.isSelected()) {
             Alert info = new Alert(Alert.AlertType.INFORMATION, plan, ButtonType.OK);
@@ -233,28 +266,25 @@ public class DeployController {
             return;
         }
 
-        IgnorePatterns ignorePatterns = IgnorePatterns.fromText(ignorePatternsArea.getText());
         if (production) {
-            confirmProductionThenDeploy(plan, toUpload, toDelete, toBackup, ignorePatterns);
+            confirmProductionThenDeploy(plan, request);
         } else {
-            confirmThenDeploy(plan, toUpload, toDelete, toBackup, ignorePatterns);
+            confirmThenDeploy(plan, request);
         }
     }
 
-    private void confirmThenDeploy(String plan, List<DiffRow> toUpload, List<DiffRow> toDelete,
-                                    List<DiffRow> toBackup, IgnorePatterns ignorePatterns) {
+    private void confirmThenDeploy(String plan, DeployRequest request) {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, plan, ButtonType.YES, ButtonType.NO);
         ThemeManager.apply(confirm.getDialogPane());
         confirm.setHeaderText(null);
         Optional<ButtonType> choice = confirm.showAndWait();
         if (choice.isPresent() && choice.get() == ButtonType.YES) {
-            startDeploy(toUpload, toDelete, toBackup, ignorePatterns);
+            startDeploy(request);
         }
     }
 
     /** Production targets require typing the host, not just a button click — same friction level as recursive delete. */
-    private void confirmProductionThenDeploy(String plan, List<DiffRow> toUpload, List<DiffRow> toDelete,
-                                              List<DiffRow> toBackup, IgnorePatterns ignorePatterns) {
+    private void confirmProductionThenDeploy(String plan, DeployRequest request) {
         TextInputDialog dialog = new TextInputDialog();
         ThemeManager.apply(dialog.getDialogPane());
         dialog.setHeaderText(null);
@@ -262,47 +292,57 @@ public class DeployController {
         dialog.setContentText(plan + "\n\nThis is a PRODUCTION host (" + host + ").\nType the host to confirm:");
         dialog.showAndWait().ifPresent(typed -> {
             if (typed.trim().equals(host)) {
-                startDeploy(toUpload, toDelete, toBackup, ignorePatterns);
+                startDeploy(request);
             } else {
                 statusLabel.setText("Confirmation text didn't match — deploy cancelled.");
             }
         });
     }
 
-    private void startDeploy(List<DiffRow> toUpload, List<DiffRow> toDelete, List<DiffRow> toBackup,
-                              IgnorePatterns ignorePatterns) {
+    private void startDeploy(DeployRequest request) {
         setBusy(true);
         statusLabel.setText("Deploying...");
 
-        Thread worker = new Thread(() -> runDeploy(toUpload, toDelete, toBackup, ignorePatterns), "deploy-sync");
+        Thread worker = new Thread(() -> runDeploy(request), "deploy-sync");
         worker.setDaemon(true);
         worker.start();
     }
 
-    private void runDeploy(List<DiffRow> toUpload, List<DiffRow> toDelete, List<DiffRow> toBackup,
-                            IgnorePatterns ignorePatterns) {
-        if (!toBackup.isEmpty()) {
-            Instant now = Instant.now();
-            String timestamp = BACKUP_TIMESTAMP_FORMAT.format(now);
-            List<String> backupPaths = toBackup.stream().map(row -> row.entry.relativePath()).toList();
+    private void runDeploy(DeployRequest req) {
+        if (!req.preHook().isBlank()) {
             try {
-                String backupPath = sessionManager.backupFilesForDeploy(remoteRoot, backupPaths, timestamp);
-                backupStore.record(host, remoteRoot, backupPath, now.toEpochMilli());
+                CommandOutcome outcome = sessionManager.runCommand(req.preHook());
+                if (!outcome.succeeded()) {
+                    abortDeploy("Pre-deploy hook failed (exit " + outcome.exitStatus() + "): " + firstLine(outcome.output()));
+                    return;
+                }
             } catch (Exception e) {
-                Platform.runLater(() -> {
-                    statusLabel.setText("Backup failed, deploy aborted: " + e.getMessage());
-                    auditRecorder.log("Deploy", "failure", "backup step failed: " + e.getMessage());
-                    setBusy(false);
-                });
+                abortDeploy("Pre-deploy hook failed: " + e.getMessage());
                 return;
             }
         }
+
+        String backupPath = null;
+        if (!req.toBackup().isEmpty()) {
+            Instant now = Instant.now();
+            String timestamp = BACKUP_TIMESTAMP_FORMAT.format(now);
+            List<String> backupPaths = req.toBackup().stream().map(row -> row.entry.relativePath()).toList();
+            try {
+                backupPath = sessionManager.backupFilesForDeploy(remoteRoot, backupPaths, timestamp);
+                List<DeployBackupRecord> dropped = backupStore.record(host, remoteRoot, backupPath, now.toEpochMilli());
+                pruneDroppedBackups(dropped);
+            } catch (Exception e) {
+                abortDeploy("Backup failed, deploy aborted: " + e.getMessage());
+                return;
+            }
+        }
+        String finalBackupPath = backupPath;
 
         int uploaded = 0;
         int deleted = 0;
         List<String> errors = new ArrayList<>();
 
-        for (DiffRow row : toUpload) {
+        for (DiffRow row : req.toUpload()) {
             String relativePath = row.entry.relativePath();
             File localFile = localRoot.resolve(relativePath).toFile();
             String remotePath = remoteRoot.endsWith("/") ? remoteRoot + relativePath : remoteRoot + "/" + relativePath;
@@ -313,10 +353,10 @@ public class DeployController {
                 errors.add(relativePath + ": " + e.getMessage());
             }
             int uploadedSoFar = uploaded;
-            Platform.runLater(() -> statusLabel.setText("Uploading... " + uploadedSoFar + "/" + toUpload.size()));
+            Platform.runLater(() -> statusLabel.setText("Uploading... " + uploadedSoFar + "/" + req.toUpload().size()));
         }
 
-        for (DiffRow row : toDelete) {
+        for (DiffRow row : req.toDelete()) {
             String relativePath = row.entry.relativePath();
             String remotePath = remoteRoot.endsWith("/") ? remoteRoot + relativePath : remoteRoot + "/" + relativePath;
             try {
@@ -328,50 +368,111 @@ public class DeployController {
             }
         }
 
+        if (errors.isEmpty() && !req.postHook().isBlank()) {
+            try {
+                CommandOutcome outcome = sessionManager.runCommand(req.postHook());
+                if (!outcome.succeeded()) {
+                    errors.add("post-deploy hook exit " + outcome.exitStatus() + ": " + firstLine(outcome.output()));
+                }
+            } catch (Exception e) {
+                errors.add("post-deploy hook: " + e.getMessage());
+            }
+        }
+
+        HealthChecker.Result healthResult = null;
+        if (errors.isEmpty() && req.healthCheckType() != HealthChecker.Type.NONE) {
+            Platform.runLater(() -> statusLabel.setText("Running health check..."));
+            healthResult = HealthChecker.runWithRetry(req.healthCheckType(), req.healthCheckTarget(),
+                    req.healthCheckExpected(), sessionManager, req.retries(), req.intervalSeconds());
+            if (!healthResult.healthy()) {
+                if (req.autoRollback() && finalBackupPath != null) {
+                    try {
+                        sessionManager.restoreDeployBackup(remoteRoot, finalBackupPath);
+                        errors.add("health check failed (" + healthResult.message() + ") — automatically rolled back");
+                        auditRecorder.log("Rollback", "success", "auto-rollback after failed health check: " + healthResult.message());
+                    } catch (Exception e) {
+                        errors.add("health check failed AND auto-rollback failed: " + e.getMessage());
+                        auditRecorder.log("Rollback", "failure", "auto-rollback after failed health check: " + e.getMessage());
+                    }
+                } else {
+                    errors.add("health check failed: " + healthResult.message());
+                }
+            }
+        }
+
         int finalUploaded = uploaded;
         int finalDeleted = deleted;
         String detail = finalUploaded + " uploaded, " + finalDeleted + " deleted"
-                + (toBackup.isEmpty() ? "" : ", " + toBackup.size() + " backed up");
+                + (req.toBackup().isEmpty() ? "" : ", " + req.toBackup().size() + " backed up");
         auditRecorder.log("Deploy", errors.isEmpty() ? "success" : "partial failure",
-                errors.isEmpty() ? detail : detail + " — " + errors.size() + " failed: " + errors.get(0));
+                errors.isEmpty() ? detail : detail + " — " + errors.get(0));
 
         Platform.runLater(() -> {
             String summary = detail;
             if (!errors.isEmpty()) {
-                summary += ", " + errors.size() + " failed (" + errors.get(0) + ")";
+                summary += ", " + errors.size() + " issue(s) (" + errors.get(0) + ")";
             }
             statusLabel.setText(summary);
             refreshRollbackAvailability();
             setBusy(false);
         });
 
-        // Refresh the comparison so the table reflects the new remote state.
         try {
-            List<DeployDiffEntry> result = DeployComparer.compare(localRoot, sessionManager, remoteRoot, ignorePatterns);
+            List<DeployDiffEntry> result = DeployComparer.compare(localRoot, sessionManager, remoteRoot, req.ignorePatterns());
             Platform.runLater(() -> diffRows.setAll(result.stream().map(DiffRow::new).toList()));
         } catch (Exception ignored) {
             // Deploy already reported its own outcome above; a failed refresh isn't itself an error.
         }
     }
 
+    private void abortDeploy(String message) {
+        auditRecorder.log("Deploy", "failure", message);
+        Platform.runLater(() -> {
+            statusLabel.setText(message);
+            setBusy(false);
+        });
+    }
+
+    private void pruneDroppedBackups(List<DeployBackupRecord> dropped) {
+        for (DeployBackupRecord old : dropped) {
+            try {
+                String fullPath = remoteRoot.endsWith("/") ? remoteRoot + old.backupPath() : remoteRoot + "/" + old.backupPath();
+                sessionManager.delete(new RemoteEntry(fileName(old.backupPath()), fullPath, false, 0, 0));
+            } catch (Exception ignored) {
+                // Best-effort cleanup; a stray old backup file isn't worth failing the deploy over.
+            }
+        }
+    }
+
     @FXML
     private void onRollback() {
-        Optional<DeployBackupRecord> record = backupStore.find(host, remoteRoot == null ? "" : remoteRoot);
-        if (record.isEmpty()) {
+        List<DeployBackupRecord> backups = backupStore.list(host, remoteRoot == null ? "" : remoteRoot);
+        if (backups.isEmpty()) {
             statusLabel.setText("No backup available to roll back to.");
             return;
         }
-        DeployBackupRecord backup = record.get();
+        List<BackupChoice> choices = backups.stream()
+                .map(r -> new BackupChoice(r, timeText(r.timestamp()) + "  (" + r.backupPath() + ")"))
+                .toList();
+        ChoiceDialog<BackupChoice> dialog = new ChoiceDialog<>(choices.get(0), choices);
+        ThemeManager.apply(dialog.getDialogPane());
+        dialog.setHeaderText(null);
+        dialog.setTitle("Roll back deployment");
+        dialog.setContentText("Restore which backup for " + remoteRoot + "?\n"
+                + "Only files that were modified by that deploy are restored — new uploads and deletions"
+                + " from that deploy are not undone.");
+        dialog.showAndWait().ifPresent(this::confirmAndRollback);
+    }
+
+    private void confirmAndRollback(BackupChoice choice) {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                "Restore the backup from " + timeText(backup.timestamp())
-                        + "?\n\nThis overwrites the current files on " + remoteRoot + " with the backed-up versions.\n"
-                        + "Only files that were modified by that deploy are restored — new uploads and deletions"
-                        + " from that deploy are not undone.",
+                "Restore the backup from " + timeText(choice.record().timestamp())
+                        + "?\n\nThis overwrites the current files on " + remoteRoot + " with the backed-up versions.",
                 ButtonType.YES, ButtonType.NO);
         ThemeManager.apply(confirm.getDialogPane());
         confirm.setHeaderText(null);
-        Optional<ButtonType> choice = confirm.showAndWait();
-        if (choice.isEmpty() || choice.get() != ButtonType.YES) {
+        Optional<ButtonType> answer = confirm.showAndWait();
+        if (answer.isEmpty() || answer.get() != ButtonType.YES) {
             return;
         }
 
@@ -380,6 +481,7 @@ public class DeployController {
         IgnorePatterns ignorePatterns = IgnorePatterns.fromText(ignorePatternsArea.getText());
 
         Thread worker = new Thread(() -> {
+            DeployBackupRecord backup = choice.record();
             try {
                 sessionManager.restoreDeployBackup(remoteRoot, backup.backupPath());
                 auditRecorder.log("Rollback", "success", "restored " + backup.backupPath());
@@ -402,20 +504,31 @@ public class DeployController {
     }
 
     private void refreshRollbackAvailability() {
-        backupAvailable = remoteRoot != null && backupStore.find(host, remoteRoot).isPresent();
+        backupAvailable = remoteRoot != null && backupStore.latest(host, remoteRoot).isPresent();
     }
 
-    private String buildPlanText(List<DiffRow> toUpload, List<DiffRow> toDelete, List<DiffRow> toBackup) {
+    private String buildPlanText(DeployRequest req) {
         List<String> steps = new ArrayList<>();
-        if (!toBackup.isEmpty()) {
-            steps.add("Back up " + toBackup.size() + " file(s) that will be overwritten");
+        if (!req.preHook().isBlank()) {
+            steps.add("Run pre-deploy hook: " + req.preHook());
         }
-        if (!toUpload.isEmpty()) {
-            long totalBytes = toUpload.stream().mapToLong(row -> Math.max(row.entry.localSize(), 0)).sum();
-            steps.add("Upload " + toUpload.size() + " file(s) (" + sizeText(totalBytes) + ")");
+        if (!req.toBackup().isEmpty()) {
+            steps.add("Back up " + req.toBackup().size() + " file(s) that will be overwritten");
         }
-        if (!toDelete.isEmpty()) {
-            steps.add("Delete " + toDelete.size() + " remote-only file(s)");
+        if (!req.toUpload().isEmpty()) {
+            long totalBytes = req.toUpload().stream().mapToLong(row -> Math.max(row.entry.localSize(), 0)).sum();
+            steps.add("Upload " + req.toUpload().size() + " file(s) (" + sizeText(totalBytes) + ")");
+        }
+        if (!req.toDelete().isEmpty()) {
+            steps.add("Delete " + req.toDelete().size() + " remote-only file(s)");
+        }
+        if (!req.postHook().isBlank()) {
+            steps.add("Run post-deploy hook: " + req.postHook());
+        }
+        if (req.healthCheckType() != HealthChecker.Type.NONE) {
+            steps.add("Health check (" + req.healthCheckType() + "): " + req.healthCheckTarget()
+                    + " — retry " + req.retries() + "x, " + req.intervalSeconds() + "s apart"
+                    + (req.autoRollback() ? ", auto-rollback on failure" : ""));
         }
         StringBuilder sb = new StringBuilder("Deployment plan\n");
         for (int i = 0; i < steps.size(); i++) {
@@ -428,6 +541,23 @@ public class DeployController {
     private static String fileName(String relativePath) {
         int lastSlash = relativePath.lastIndexOf('/');
         return lastSlash >= 0 ? relativePath.substring(lastSlash + 1) : relativePath;
+    }
+
+    private static String firstLine(String text) {
+        if (text == null) {
+            return "";
+        }
+        String trimmed = text.trim();
+        int newline = trimmed.indexOf('\n');
+        return newline >= 0 ? trimmed.substring(0, newline) : trimmed;
+    }
+
+    private static int parseIntOr(String text, int fallback) {
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (Exception e) {
+            return fallback;
+        }
     }
 
     private void setBusy(boolean busy) {
@@ -517,6 +647,21 @@ public class DeployController {
             this.selected = new SimpleBooleanProperty(
                     entry.status() == DeployDiffEntry.Status.MODIFIED
                             || entry.status() == DeployDiffEntry.Status.LOCAL_ONLY);
+        }
+    }
+
+    /** Bundles one deploy execution's parameters so they don't have to thread through every method individually. */
+    private record DeployRequest(List<DiffRow> toUpload, List<DiffRow> toDelete, List<DiffRow> toBackup,
+                                  IgnorePatterns ignorePatterns, String preHook, String postHook,
+                                  HealthChecker.Type healthCheckType, String healthCheckTarget, String healthCheckExpected,
+                                  int retries, int intervalSeconds, boolean autoRollback) {
+    }
+
+    /** Gives a DeployBackupRecord a human-readable label for the rollback picker dialog. */
+    private record BackupChoice(DeployBackupRecord record, String label) {
+        @Override
+        public String toString() {
+            return label;
         }
     }
 }

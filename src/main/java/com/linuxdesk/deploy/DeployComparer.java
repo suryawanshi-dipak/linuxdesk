@@ -4,11 +4,14 @@ import com.linuxdesk.ssh.RemoteEntry;
 import com.linuxdesk.ssh.SshSessionManager;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +32,17 @@ public final class DeployComparer {
 
     public static List<DeployDiffEntry> compare(Path localRoot, SshSessionManager sessionManager, String remoteRoot,
                                                   IgnorePatterns ignorePatterns) throws IOException {
+        return compare(localRoot, sessionManager, remoteRoot, ignorePatterns, false);
+    }
+
+    /**
+     * @param verifyChecksums when two files have the same size, hash both sides (SHA-256, local
+     *                        in-process / remote via `sha256sum`) instead of trusting size alone.
+     *                        Slower (per SRS FR-DEP-003: "checksum optional for speed") but catches
+     *                        same-size-different-content files the default size-only check would miss.
+     */
+    public static List<DeployDiffEntry> compare(Path localRoot, SshSessionManager sessionManager, String remoteRoot,
+                                                  IgnorePatterns ignorePatterns, boolean verifyChecksums) throws IOException {
         Map<String, LocalFile> localFiles = scanLocal(localRoot, ignorePatterns);
         Map<String, RemoteEntry> remoteFiles = scanRemote(sessionManager, remoteRoot, ignorePatterns);
 
@@ -52,13 +66,45 @@ public final class DeployComparer {
                 // the future deploy step's job), so remote mtime is just "last deployed at" and
                 // will almost always differ from the local edit time even for byte-identical
                 // content. Using it here would make "Identical" nearly never trigger in practice.
-                DeployDiffEntry.Status status = (local.size() == remote.size())
-                        ? DeployDiffEntry.Status.IDENTICAL : DeployDiffEntry.Status.MODIFIED;
+                boolean sameSize = local.size() == remote.size();
+                boolean identical = sameSize
+                        && (!verifyChecksums || checksumsMatch(localRoot.resolve(relativePath), sessionManager, remote.path()));
+                DeployDiffEntry.Status status = identical ? DeployDiffEntry.Status.IDENTICAL : DeployDiffEntry.Status.MODIFIED;
                 result.add(new DeployDiffEntry(relativePath, status,
                         local.size(), local.modifiedMillis(), remote.size(), remote.modifiedMillis()));
             }
         }
         return result;
+    }
+
+    private static boolean checksumsMatch(Path localFile, SshSessionManager sessionManager, String remotePath) {
+        try {
+            String localHash = sha256(localFile);
+            String remoteHash = sessionManager.sha256(remotePath);
+            return localHash.equalsIgnoreCase(remoteHash);
+        } catch (IOException e) {
+            // Can't hash one side (permissions, transient error, etc.) — fall back to "not identical"
+            // rather than silently reporting a false match.
+            return false;
+        }
+    }
+
+    private static String sha256(Path file) throws IOException {
+        try (InputStream in = Files.newInputStream(file)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+            StringBuilder hex = new StringBuilder();
+            for (byte b : digest.digest()) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IOException("SHA-256 unavailable", e);
+        }
     }
 
     private static Map<String, LocalFile> scanLocal(Path root, IgnorePatterns ignorePatterns) throws IOException {
