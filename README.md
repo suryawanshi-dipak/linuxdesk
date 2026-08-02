@@ -1,10 +1,34 @@
 # LinuxDesk
 
-A native desktop SSH GUI and remote management workspace built for Linux system administration with complete command transparency.
+**Full graphical control of a Linux server, with nothing installed on the server.**
 
-## Status
+LinuxDesk is a native Windows desktop application for managing Linux servers over plain SSH/SFTP — files, deployments, services, processes, logs, and monitoring, all in one tool, with every consequential action visible as the real command behind it before it runs. If you can SSH into a box, you can manage it graphically with LinuxDesk. No agent, no daemon, nothing to install or keep patched on the server itself.
 
-Early v1 in active development. The login window with multi-profile management and connection history, SSH/SFTP connection with host key verification, remote folder browser with recent folders/files, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, a system monitor dashboard, a tamper-evident audit log, and a deployment workflow (local↔remote comparison, selective sync, automatic backup, one-click rollback, dry-run, and typed production confirmation) are built and UI-verified locally, tested end-to-end against a real VM (Oracle VM OCI). Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
+## Why LinuxDesk
+
+Existing tools force a tradeoff. File-transfer clients like WinSCP move bytes and stop there. Terminal clients like PuTTY and MobaXterm improve access to the shell but you're still typing every command. Web control panels like Cockpit and Webmin cover real breadth, but require installing and maintaining a privileged daemon on every server — disqualifying on hardened hosts, in port-22-only environments, or for anyone without install authority on the box.
+
+LinuxDesk's answer is **agentless breadth**: one SSH connection, one native desktop app, and the full admin workflow — files, deployment, services, processes, logs, monitoring — without installing anything on the server beyond the SSH key you already need. Every action previews the exact command or plan before it runs, so the tool never becomes a black box between you and the machine you're responsible for.
+
+**Who it's for** — developers deploying to their own servers, sysadmins managing fleets they didn't build, freelancers and small agencies running several clients' infrastructure through one login, and anyone who wants a real GUI for Linux administration without giving up transparency or installing a second attack surface on every host they touch.
+
+## What sets it apart
+
+- **Nothing installed on the server.** SSH/SFTP is the entire dependency — works anywhere `ssh` already works.
+- **Command transparency, not a black box.** Destructive or consequential actions are previewable and auditable, not hidden behind a single "magic" button.
+- **Deployment as a first-class workflow**, not a file browser with an upload button bolted on: compare, selective sync, ignore patterns, pre/post-deploy hooks, post-deploy health checks, automatic backup with retention, and rollback to any retained backup.
+- **Safety by design.** Typed confirmation for destructive actions on Production-tagged hosts, blast-radius previews before recursive permission changes, and a tamper-evident, hash-chained audit log of everything the tool does.
+- **Native desktop performance.** A real JavaFX application, not an Electron wrapper — native OS drag-and-drop, a UI thread that stays responsive during long transfers, and no bundled browser runtime.
+
+## Documentation
+
+- **[How to Use LinuxDesk](Documentation/How-To-Use-LinuxDesk.md)** — step-by-step guide to every feature
+- **[Product Analysis & SRS](Documentation/LinuxDesk-Product-Analysis-SRS.md)** — the full product vision, market analysis, and requirements spec this is being built against
+- **[Project wiki](wiki/Home.md)** — architecture, roadmap, and known limitations, kept current alongside development
+
+## Project status
+
+Early v1, in active development — but already well past a toy. The login window with multi-profile management and connection history, SSH/SFTP connection with host key verification, remote folder browser with recent folders/files, drag-and-drop, a syntax-highlighting file editor with find/replace, file management (copy/paste/rename/delete/new), permissions/ownership editing, archive compress/extract, local↔remote upload/download, an interactive SSH terminal, a remote task manager, a systemd service manager, a live log viewer, a system monitor dashboard, a tamper-evident audit log, and a deployment workflow (local↔remote comparison, selective sync, ignore patterns, hooks, automatic backup with retention, rollback, health checks, dry-run, and typed production confirmation) are built and verified end-to-end against a real VM (Oracle Cloud Infrastructure). Everything else in the [product analysis / SRS doc](Documentation/LinuxDesk-Product-Analysis-SRS.md) is still ahead of us.
 
 ## Tech stack
 
@@ -14,7 +38,7 @@ Early v1 in active development. The login window with multi-profile management a
 - **RichTextFX** — the code editor's syntax highlighting and line numbers (plain JavaFX `TextArea` has no per-character styling API)
 - **Maven** — build
 
-## What's implemented so far
+## Features
 
 - **Login window** — Host/IP, port, username, a Private Key / Password toggle for the auth method, private key file (with file browser) with optional passphrase or a plain password (neither ever persisted), and a live preview of the equivalent `ssh` command. Selecting a `.pub` file or a nonexistent key path fails fast with a clear message instead of a raw SSH exception. The client is explicitly configured to use *only* the credential entered in the form — Apache MINA SSHD's default behavior of also trying the user's `~/.ssh/id_*` files (mirroring the `ssh` CLI) is disabled, so a wrong password can't silently "succeed" via an unrelated key.
 - **Multi-profile management** — a sidebar lists every saved profile (colour dot + name + PROD badge), with an incremental search box and New/Duplicate/Delete actions. Each profile has a name, colour tag (6-swatch picker), and a Production flag, persisted to `~/.linuxdesk/profiles.properties` (passphrase always excluded); the last-used profile is reselected automatically on the next launch. An old single-profile `profile.properties` from before this feature is migrated in automatically as a "Default" profile the first time the app runs. A profile marked Production shows a red "PRODUCTION" badge in the desktop toolbar once connected, and recursive folder deletes on that connection require typing the folder's name to confirm instead of a plain Yes/No click.
