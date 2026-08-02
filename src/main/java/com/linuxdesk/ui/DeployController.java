@@ -2,6 +2,7 @@ package com.linuxdesk.ui;
 
 import com.linuxdesk.deploy.DeployComparer;
 import com.linuxdesk.deploy.DeployDiffEntry;
+import com.linuxdesk.deploy.IgnorePatterns;
 import com.linuxdesk.ssh.RemoteEntry;
 import com.linuxdesk.ssh.SshSessionManager;
 import javafx.application.Platform;
@@ -17,6 +18,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.stage.DirectoryChooser;
@@ -48,6 +50,7 @@ public class DeployController {
     @FXML private Button selectAllButton;
     @FXML private Button selectNoneButton;
     @FXML private Button deployButton;
+    @FXML private TextArea ignorePatternsArea;
     @FXML private Label statusLabel;
 
     @FXML private TableView<DiffRow> diffTable;
@@ -67,6 +70,7 @@ public class DeployController {
         this.sessionManager = sessionManager;
         stage.setTitle("Deploy");
         remotePathField.setText(initialRemotePath == null ? "" : initialRemotePath);
+        ignorePatternsArea.setText(String.join("\n", IgnorePatterns.DEFAULT_PATTERNS));
 
         TableColumn<DiffRow, Boolean> selectColumn = new TableColumn<>("");
         selectColumn.setCellValueFactory(data -> data.getValue().selected);
@@ -115,6 +119,7 @@ public class DeployController {
             return;
         }
         remoteRoot = remotePath;
+        IgnorePatterns ignorePatterns = IgnorePatterns.fromText(ignorePatternsArea.getText());
 
         setBusy(true);
         statusLabel.setText("Comparing...");
@@ -122,7 +127,7 @@ public class DeployController {
 
         Thread worker = new Thread(() -> {
             try {
-                List<DeployDiffEntry> result = DeployComparer.compare(localRoot, sessionManager, remotePath);
+                List<DeployDiffEntry> result = DeployComparer.compare(localRoot, sessionManager, remotePath, ignorePatterns);
                 Platform.runLater(() -> {
                     diffRows.setAll(result.stream().map(DiffRow::new).toList());
                     statusLabel.setText(summaryText(result));
@@ -137,6 +142,23 @@ public class DeployController {
         }, "deploy-compare");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    @FXML
+    private void onImportGitignore() {
+        if (localRoot == null) {
+            statusLabel.setText("Choose a local folder first.");
+            return;
+        }
+        List<String> lines = IgnorePatterns.readGitignoreLines(localRoot);
+        if (lines.isEmpty()) {
+            statusLabel.setText("No .gitignore found in " + localRoot);
+            return;
+        }
+        String existing = ignorePatternsArea.getText();
+        String addition = "# from .gitignore\n" + String.join("\n", lines);
+        ignorePatternsArea.setText(existing.isBlank() ? addition : existing + "\n" + addition);
+        statusLabel.setText("Imported " + lines.size() + " line(s) from .gitignore.");
     }
 
     @FXML
@@ -188,13 +210,14 @@ public class DeployController {
 
         setBusy(true);
         statusLabel.setText("Deploying...");
+        IgnorePatterns ignorePatterns = IgnorePatterns.fromText(ignorePatternsArea.getText());
 
-        Thread worker = new Thread(() -> runDeploy(toUpload, toDelete), "deploy-sync");
+        Thread worker = new Thread(() -> runDeploy(toUpload, toDelete, ignorePatterns), "deploy-sync");
         worker.setDaemon(true);
         worker.start();
     }
 
-    private void runDeploy(List<DiffRow> toUpload, List<DiffRow> toDelete) {
+    private void runDeploy(List<DiffRow> toUpload, List<DiffRow> toDelete, IgnorePatterns ignorePatterns) {
         int uploaded = 0;
         int deleted = 0;
         List<String> errors = new ArrayList<>();
@@ -238,7 +261,7 @@ public class DeployController {
 
         // Refresh the comparison so the table reflects the new remote state.
         try {
-            List<DeployDiffEntry> result = DeployComparer.compare(localRoot, sessionManager, remoteRoot);
+            List<DeployDiffEntry> result = DeployComparer.compare(localRoot, sessionManager, remoteRoot, ignorePatterns);
             Platform.runLater(() -> diffRows.setAll(result.stream().map(DiffRow::new).toList()));
         } catch (Exception ignored) {
             // Deploy already reported its own outcome above; a failed refresh isn't itself an error.

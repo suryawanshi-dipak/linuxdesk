@@ -20,20 +20,17 @@ import java.util.TreeSet;
  * Walks a local directory and its remote deployment target, then classifies every file as
  * identical, modified, local-only, or remote-only. Directories aren't compared as entries
  * themselves — only the files within them, matching how the eventual file transfer works.
+ * Files/directories matched by {@link IgnorePatterns} are pruned from both sides before comparing.
  */
 public final class DeployComparer {
-
-    private static final Set<String> IGNORED_DIR_NAMES =
-            Set.of(".git", "node_modules", "__pycache__", "target", "build", "dist", ".idea", ".vscode");
-    private static final Set<String> IGNORED_FILE_NAMES = Set.of(".env", ".DS_Store");
 
     private DeployComparer() {
     }
 
-    public static List<DeployDiffEntry> compare(Path localRoot, SshSessionManager sessionManager, String remoteRoot)
-            throws IOException {
-        Map<String, LocalFile> localFiles = scanLocal(localRoot);
-        Map<String, RemoteEntry> remoteFiles = scanRemote(sessionManager, remoteRoot);
+    public static List<DeployDiffEntry> compare(Path localRoot, SshSessionManager sessionManager, String remoteRoot,
+                                                  IgnorePatterns ignorePatterns) throws IOException {
+        Map<String, LocalFile> localFiles = scanLocal(localRoot, ignorePatterns);
+        Map<String, RemoteEntry> remoteFiles = scanRemote(sessionManager, remoteRoot, ignorePatterns);
 
         Set<String> allPaths = new TreeSet<>();
         allPaths.addAll(localFiles.keySet());
@@ -64,7 +61,7 @@ public final class DeployComparer {
         return result;
     }
 
-    private static Map<String, LocalFile> scanLocal(Path root) throws IOException {
+    private static Map<String, LocalFile> scanLocal(Path root, IgnorePatterns ignorePatterns) throws IOException {
         Map<String, LocalFile> files = new LinkedHashMap<>();
         if (!Files.isDirectory(root)) {
             return files;
@@ -72,7 +69,12 @@ public final class DeployComparer {
         Files.walkFileTree(root, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (!dir.equals(root) && IGNORED_DIR_NAMES.contains(dir.getFileName().toString())) {
+                if (dir.equals(root)) {
+                    return FileVisitResult.CONTINUE;
+                }
+                String relativePath = toRelativeUnixPath(root, dir);
+                String name = dir.getFileName().toString();
+                if (ignorePatterns.isDirectoryIgnored(relativePath, name)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;
@@ -80,11 +82,11 @@ public final class DeployComparer {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                String relativePath = toRelativeUnixPath(root, file);
                 String name = file.getFileName().toString();
-                if (IGNORED_FILE_NAMES.contains(name) || name.endsWith(".log")) {
+                if (ignorePatterns.isFileIgnored(relativePath, name)) {
                     return FileVisitResult.CONTINUE;
                 }
-                String relativePath = toRelativeUnixPath(root, file);
                 files.put(relativePath, new LocalFile(attrs.size(), attrs.lastModifiedTime().toMillis()));
                 return FileVisitResult.CONTINUE;
             }
@@ -97,17 +99,36 @@ public final class DeployComparer {
         return files;
     }
 
-    private static Map<String, RemoteEntry> scanRemote(SshSessionManager sessionManager, String remoteRoot)
-            throws IOException {
+    private static Map<String, RemoteEntry> scanRemote(SshSessionManager sessionManager, String remoteRoot,
+                                                         IgnorePatterns ignorePatterns) throws IOException {
         Map<String, RemoteEntry> files = new LinkedHashMap<>();
-        String normalizedRoot = remoteRoot.endsWith("/") ? remoteRoot : remoteRoot + "/";
-        for (RemoteEntry entry : sessionManager.listTreeRecursive(remoteRoot)) {
-            String relativePath = entry.path().startsWith(normalizedRoot)
-                    ? entry.path().substring(normalizedRoot.length())
-                    : entry.path();
-            files.put(relativePath, entry);
+        if (sessionManager.exists(remoteRoot)) {
+            collectRemote(sessionManager, remoteRoot, remoteRoot, ignorePatterns, files);
         }
         return files;
+    }
+
+    private static void collectRemote(SshSessionManager sessionManager, String rootPath, String currentPath,
+                                       IgnorePatterns ignorePatterns, Map<String, RemoteEntry> out) throws IOException {
+        for (RemoteEntry entry : sessionManager.listDirectory(currentPath)) {
+            String relativePath = relativize(rootPath, entry.path());
+            if (entry.directory()) {
+                if (ignorePatterns.isDirectoryIgnored(relativePath, entry.name())) {
+                    continue;
+                }
+                collectRemote(sessionManager, rootPath, entry.path(), ignorePatterns, out);
+            } else {
+                if (ignorePatterns.isFileIgnored(relativePath, entry.name())) {
+                    continue;
+                }
+                out.put(relativePath, entry);
+            }
+        }
+    }
+
+    private static String relativize(String root, String fullPath) {
+        String normalizedRoot = root.endsWith("/") ? root : root + "/";
+        return fullPath.startsWith(normalizedRoot) ? fullPath.substring(normalizedRoot.length()) : fullPath;
     }
 
     private static String toRelativeUnixPath(Path root, Path file) {

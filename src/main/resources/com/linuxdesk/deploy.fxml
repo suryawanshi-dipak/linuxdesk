@@ -5,6 +5,7 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
@@ -31,6 +32,15 @@
                 <Label text="Remote" styleClass="field-label"/>
                 <TextField fx:id="remotePathField" styleClass="field-input" HBox.hgrow="ALWAYS"/>
                 <Button fx:id="compareButton" text="Compare" onAction="#onCompare" styleClass="primary-button"/>
+            </HBox>
+            <HBox spacing="10" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
+                <padding>
+                    <Insets top="6" right="16" bottom="6" left="16"/>
+                </padding>
+                <Label text="Ignore" styleClass="field-label"/>
+                <TextArea fx:id="ignorePatternsArea" styleClass="field-input" prefRowCount="3" wrapText="false"
+                          HBox.hgrow="ALWAYS"/>
+                <Button text="Import .gitignore" onAction="#onImportGitignore" styleClass="secondary-button"/>
             </HBox>
             <HBox spacing="10" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
                 <padding>
