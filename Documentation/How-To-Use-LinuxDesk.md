@@ -4,6 +4,8 @@ A practical, step-by-step guide to actually using the app — not just what's bu
 
 ## 1. Logging in
 
+![Login screen](../Images/Login.png)
+
 1. Launch the app. You land on **Connect to VM**, with a **Profiles** / **Recent** sidebar on the left.
 2. Fill in **Host / IP**, **Port** (defaults to `22`), and **Username**.
 3. Choose an auth method:
@@ -20,6 +22,8 @@ Use the **Recent** tab in the sidebar to reconnect to one of your last 20 connec
 
 Once connected, the remote home directory opens as a desktop-style icon grid with a taskbar at the bottom.
 
+![Remote folder browser](../Images/Dashboard.png)
+
 - **Navigate**: double-click a folder to enter it; **← Back** to go up.
 - **Search / recent items**: click the taskbar search field. Typing filters files/folders in the current directory and app commands (Task Manager, Terminal, etc.); an empty, focused search box shows your recently visited folders and opened files instead.
 - **Right-click a file or folder** for Copy, Paste, Rename, Delete, Permissions, Compress to (zip/tar.gz), Extract Here (on recognized archives), and Download.
@@ -32,15 +36,30 @@ Once connected, the remote home directory opens as a desktop-style icon grid wit
 Click the **LinuxDesk** button at the bottom-left (or the taskbar search) to open:
 
 - **Terminal** — a real interactive shell on the remote host.
+
+  ![Terminal](../Images/Terminal.png)
+
 - **Task Manager** — toggle between **Processes** (`ps`, sortable, searchable, End Task) and **Services** (`systemctl`, Start/Stop/Restart/Enable/Disable). Stopping/restarting/disabling `ssh`/`sshd` requires typing the exact unit name first, since that could cut off your own session.
+
+  ![Task manager — processes](../Images/TaskManager.png)
+  ![Task manager — services](../Images/ServiceManager.png)
+
 - **Log Viewer** — tail the system journal or an arbitrary log file, with a live substring filter and auto-scroll.
+
+  ![Log viewer](../Images/Logviewer.png)
+
 - **Monitor** — CPU%/Memory% line charts and a disk usage table, refreshing every 2 seconds.
+
+  ![System monitor](../Images/Monitor.png)
+
 - **Deploy** — see §4, the biggest feature.
 - **Audit Log** — a searchable, tamper-evident record of every connect/disconnect, delete, permission change, service action, process kill, deploy, and rollback. Click **Verify Integrity** to confirm no entry has been edited or deleted after the fact.
 
 ## 4. Deploying
 
 Open **Deploy** from the Start panel. This is a local↔remote sync workflow with backup and rollback built in.
+
+![Deploy](../Images/Deployment.png)
 
 ### 4.1 Compare
 

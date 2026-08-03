@@ -4,6 +4,27 @@
 
 LinuxDesk is a native Windows desktop application for managing Linux servers over plain SSH/SFTP — files, deployments, services, processes, logs, and monitoring, all in one tool, with every consequential action visible as the real command behind it before it runs. If you can SSH into a box, you can manage it graphically with LinuxDesk. No agent, no daemon, nothing to install or keep patched on the server itself.
 
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="Images/Login.png" alt="Login screen"/><br/><sub><b>Login</b> — multi-profile sidebar, live <code>ssh</code> command preview, Production tagging</sub></td>
+<td width="50%"><img src="Images/Dashboard.png" alt="Remote folder browser"/><br/><sub><b>Remote folder browser</b> — desktop-style icon grid with taskbar and search</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="Images/Terminal.png" alt="Interactive terminal"/><br/><sub><b>Terminal</b> — a real interactive shell on the remote host</sub></td>
+<td width="50%"><img src="Images/TaskManager.png" alt="Task manager - processes"/><br/><sub><b>Task manager</b> — live processes, sortable and searchable</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="Images/ServiceManager.png" alt="Task manager - services"/><br/><sub><b>Service manager</b> — systemd units, start/stop/restart/enable/disable</sub></td>
+<td width="50%"><img src="Images/Logviewer.png" alt="Log viewer"/><br/><sub><b>Log viewer</b> — live journal/file tailing with a substring filter</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="Images/Monitor.png" alt="System monitor"/><br/><sub><b>System monitor</b> — CPU/memory charts and disk usage</sub></td>
+<td width="50%"><img src="Images/Deployment.png" alt="Deploy workflow"/><br/><sub><b>Deploy</b> — compare, hooks, health checks, dry run, and a plan preview before anything runs</sub></td>
+</tr>
+</table>
+
 ## Why LinuxDesk
 
 Existing tools force a tradeoff. File-transfer clients like WinSCP move bytes and stop there. Terminal clients like PuTTY and MobaXterm improve access to the shell but you're still typing every command. Web control panels like Cockpit and Webmin cover real breadth, but require installing and maintaining a privileged daemon on every server — disqualifying on hardened hosts, in port-22-only environments, or for anyone without install authority on the box.
