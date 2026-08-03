@@ -23,6 +23,7 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -79,6 +80,7 @@ public class DeployController {
     @FXML private Button rollbackButton;
     @FXML private Button deployButton;
     @FXML private Label statusLabel;
+    @FXML private ProgressIndicator busyIndicator;
 
     @FXML private TableView<DiffRow> diffTable;
     @FXML private TableColumn<DiffRow, String> statusColumn;
@@ -260,7 +262,7 @@ public class DeployController {
 
         if (dryRunCheck.isSelected()) {
             Alert info = new Alert(Alert.AlertType.INFORMATION, plan, ButtonType.OK);
-            ThemeManager.apply(info.getDialogPane());
+            ThemeManager.apply(info);
             info.setHeaderText("Dry run — nothing will be executed.");
             info.showAndWait();
             return;
@@ -275,7 +277,7 @@ public class DeployController {
 
     private void confirmThenDeploy(String plan, DeployRequest request) {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, plan, ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         Optional<ButtonType> choice = confirm.showAndWait();
         if (choice.isPresent() && choice.get() == ButtonType.YES) {
@@ -286,7 +288,7 @@ public class DeployController {
     /** Production targets require typing the host, not just a button click — same friction level as recursive delete. */
     private void confirmProductionThenDeploy(String plan, DeployRequest request) {
         TextInputDialog dialog = new TextInputDialog();
-        ThemeManager.apply(dialog.getDialogPane());
+        ThemeManager.apply(dialog);
         dialog.setHeaderText(null);
         dialog.setTitle("Confirm deploy to production host");
         dialog.setContentText(plan + "\n\nThis is a PRODUCTION host (" + host + ").\nType the host to confirm:");
@@ -455,7 +457,7 @@ public class DeployController {
                 .map(r -> new BackupChoice(r, timeText(r.timestamp()) + "  (" + r.backupPath() + ")"))
                 .toList();
         ChoiceDialog<BackupChoice> dialog = new ChoiceDialog<>(choices.get(0), choices);
-        ThemeManager.apply(dialog.getDialogPane());
+        ThemeManager.apply(dialog);
         dialog.setHeaderText(null);
         dialog.setTitle("Roll back deployment");
         dialog.setContentText("Restore which backup for " + remoteRoot + "?\n"
@@ -469,7 +471,7 @@ public class DeployController {
                 "Restore the backup from " + timeText(choice.record().timestamp())
                         + "?\n\nThis overwrites the current files on " + remoteRoot + " with the backed-up versions.",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         Optional<ButtonType> answer = confirm.showAndWait();
         if (answer.isEmpty() || answer.get() != ButtonType.YES) {
@@ -561,6 +563,8 @@ public class DeployController {
     }
 
     private void setBusy(boolean busy) {
+        busyIndicator.setVisible(busy);
+        busyIndicator.setManaged(busy);
         compareButton.setDisable(busy || localRoot == null);
         deployButton.setDisable(busy || diffRows.isEmpty());
         selectAllButton.setDisable(busy || diffRows.isEmpty());

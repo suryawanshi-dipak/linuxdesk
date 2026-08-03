@@ -329,16 +329,42 @@ public class SshSessionManager implements AutoCloseable {
         }
     }
 
+    private static final int TRANSFER_BUFFER_SIZE = 64 * 1024;
+    private static final ProgressListener NO_OP_PROGRESS = (transferred, total) -> { };
+
     /** Uploads a local file or directory tree into the given remote path. */
     public void upload(File localFile, String remotePath) throws IOException {
+        upload(localFile, remotePath, NO_OP_PROGRESS);
+    }
+
+    /** Same as {@link #upload(File, String)}, reporting cumulative bytes transferred for a progress bar. */
+    public void upload(File localFile, String remotePath, ProgressListener listener) throws IOException {
+        long total = calculateLocalSize(localFile);
+        long[] transferred = {0};
         if (localFile.isDirectory()) {
-            uploadDirectory(localFile, remotePath);
+            uploadDirectory(localFile, remotePath, transferred, total, listener);
         } else {
-            uploadFile(localFile, remotePath);
+            uploadFile(localFile, remotePath, transferred, total, listener);
         }
     }
 
-    private void uploadDirectory(File localDir, String remotePath) throws IOException {
+    private long calculateLocalSize(File file) {
+        if (!file.isDirectory()) {
+            return file.length();
+        }
+        File[] children = file.listFiles();
+        if (children == null) {
+            return 0;
+        }
+        long sum = 0;
+        for (File child : children) {
+            sum += calculateLocalSize(child);
+        }
+        return sum;
+    }
+
+    private void uploadDirectory(File localDir, String remotePath, long[] transferred, long total,
+            ProgressListener listener) throws IOException {
         if (!exists(remotePath)) {
             sftpClient.mkdir(remotePath);
         }
@@ -349,9 +375,9 @@ public class SshSessionManager implements AutoCloseable {
         for (File child : children) {
             String childRemotePath = remotePath.endsWith("/") ? remotePath + child.getName() : remotePath + "/" + child.getName();
             if (child.isDirectory()) {
-                uploadDirectory(child, childRemotePath);
+                uploadDirectory(child, childRemotePath, transferred, total, listener);
             } else {
-                uploadFile(child, childRemotePath);
+                uploadFile(child, childRemotePath, transferred, total, listener);
             }
         }
     }
@@ -366,7 +392,7 @@ public class SshSessionManager implements AutoCloseable {
         if (lastSlash > 0) {
             ensureRemoteDirectories(remotePath.substring(0, lastSlash));
         }
-        uploadFile(localFile, remotePath);
+        uploadFile(localFile, remotePath, new long[]{0}, localFile.length(), NO_OP_PROGRESS);
     }
 
     /** Creates {@code path} and any missing parent directories remotely, tolerating ones that already exist. */
@@ -387,24 +413,49 @@ public class SshSessionManager implements AutoCloseable {
         }
     }
 
-    private void uploadFile(File localFile, String remotePath) throws IOException {
+    private void uploadFile(File localFile, String remotePath, long[] transferred, long total,
+            ProgressListener listener) throws IOException {
         try (InputStream in = new FileInputStream(localFile);
              OutputStream out = sftpClient.write(remotePath,
                      EnumSet.of(SftpClient.OpenMode.Create, SftpClient.OpenMode.Write, SftpClient.OpenMode.Truncate))) {
-            in.transferTo(out);
+            copyWithProgress(in, out, transferred, total, listener);
         }
     }
 
     /** Downloads a remote file or directory tree into the given local path. */
     public void download(RemoteEntry entry, File localTarget) throws IOException {
+        download(entry, localTarget, NO_OP_PROGRESS);
+    }
+
+    /** Same as {@link #download(RemoteEntry, File)}, reporting cumulative bytes transferred for a progress bar. */
+    public void download(RemoteEntry entry, File localTarget, ProgressListener listener) throws IOException {
+        long total = calculateRemoteSize(entry.path(), entry.directory());
+        long[] transferred = {0};
         if (entry.directory()) {
-            downloadDirectory(entry.path(), localTarget);
+            downloadDirectory(entry.path(), localTarget, transferred, total, listener);
         } else {
-            downloadFile(entry.path(), localTarget);
+            downloadFile(entry.path(), localTarget, transferred, total, listener);
         }
     }
 
-    private void downloadDirectory(String remotePath, File localDir) throws IOException {
+    private long calculateRemoteSize(String path, boolean directory) throws IOException {
+        if (!directory) {
+            return sftpClient.stat(path).getSize();
+        }
+        long sum = 0;
+        for (SftpClient.DirEntry dirEntry : sftpClient.readDir(path)) {
+            String name = dirEntry.getFilename();
+            if (name.equals(".") || name.equals("..")) {
+                continue;
+            }
+            String childPath = path.endsWith("/") ? path + name : path + "/" + name;
+            sum += calculateRemoteSize(childPath, dirEntry.getAttributes().isDirectory());
+        }
+        return sum;
+    }
+
+    private void downloadDirectory(String remotePath, File localDir, long[] transferred, long total,
+            ProgressListener listener) throws IOException {
         if (!localDir.exists() && !localDir.mkdirs()) {
             throw new IOException("Failed to create local directory: " + localDir);
         }
@@ -416,21 +467,33 @@ public class SshSessionManager implements AutoCloseable {
             String childRemote = remotePath.endsWith("/") ? remotePath + name : remotePath + "/" + name;
             File childLocal = new File(localDir, name);
             if (dirEntry.getAttributes().isDirectory()) {
-                downloadDirectory(childRemote, childLocal);
+                downloadDirectory(childRemote, childLocal, transferred, total, listener);
             } else {
-                downloadFile(childRemote, childLocal);
+                downloadFile(childRemote, childLocal, transferred, total, listener);
             }
         }
     }
 
-    private void downloadFile(String remotePath, File localFile) throws IOException {
+    private void downloadFile(String remotePath, File localFile, long[] transferred, long total,
+            ProgressListener listener) throws IOException {
         File parent = localFile.getParentFile();
         if (parent != null && !parent.exists() && !parent.mkdirs()) {
             throw new IOException("Failed to create local directory: " + parent);
         }
         try (InputStream in = sftpClient.read(remotePath, EnumSet.of(SftpClient.OpenMode.Read));
              OutputStream out = new FileOutputStream(localFile)) {
-            in.transferTo(out);
+            copyWithProgress(in, out, transferred, total, listener);
+        }
+    }
+
+    private void copyWithProgress(InputStream in, OutputStream out, long[] transferred, long total,
+            ProgressListener listener) throws IOException {
+        byte[] buffer = new byte[TRANSFER_BUFFER_SIZE];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+            transferred[0] += read;
+            listener.onProgress(transferred[0], total);
         }
     }
 

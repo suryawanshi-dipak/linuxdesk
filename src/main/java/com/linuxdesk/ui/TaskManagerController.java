@@ -18,6 +18,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -42,6 +43,7 @@ public class TaskManagerController {
     @FXML private ToggleButton servicesToggle;
     @FXML private TextField searchField;
     @FXML private Label statusLabel;
+    @FXML private ProgressIndicator busyIndicator;
     @FXML private Button endTaskButton;
     @FXML private Button serviceStartButton;
     @FXML private Button serviceStopButton;
@@ -235,7 +237,7 @@ public class TaskManagerController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "End \"" + selected.command() + "\" (PID " + selected.pid() + ")? Unsaved work in that process will be lost.",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button != ButtonType.YES) {
@@ -301,7 +303,7 @@ public class TaskManagerController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 capitalize(action) + " \"" + service.name() + "\"?",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button == ButtonType.YES) {
@@ -312,7 +314,7 @@ public class TaskManagerController {
 
     private void confirmCriticalServiceAction(RemoteService service, String action) {
         TextInputDialog dialog = new TextInputDialog();
-        ThemeManager.apply(dialog.getDialogPane());
+        ThemeManager.apply(dialog);
         dialog.setHeaderText(null);
         dialog.setTitle("Confirm: SSH service");
         dialog.setContentText(capitalize(action) + "ing \"" + service.name()
@@ -378,6 +380,8 @@ public class TaskManagerController {
 
     private void loadProcesses() {
         statusLabel.setText("Loading...");
+        busyIndicator.setVisible(true);
+        busyIndicator.setManaged(true);
         Thread worker = new Thread(this::refreshProcessesQuietly, "task-manager-load");
         worker.setDaemon(true);
         worker.start();
@@ -395,15 +399,23 @@ public class TaskManagerController {
                             .findFirst()
                             .ifPresent(p -> processTable.getSelectionModel().select(p));
                 }
+                busyIndicator.setVisible(false);
+                busyIndicator.setManaged(false);
                 statusLabel.setText(processes.size() + " processes");
             });
         } catch (Exception e) {
-            Platform.runLater(() -> statusLabel.setText("Failed to load processes: " + e.getMessage()));
+            Platform.runLater(() -> {
+                busyIndicator.setVisible(false);
+                busyIndicator.setManaged(false);
+                statusLabel.setText("Failed to load processes: " + e.getMessage());
+            });
         }
     }
 
     private void loadServices() {
         statusLabel.setText("Loading...");
+        busyIndicator.setVisible(true);
+        busyIndicator.setManaged(true);
 
         Thread worker = new Thread(() -> {
             try {
@@ -417,10 +429,16 @@ public class TaskManagerController {
                                 .findFirst()
                                 .ifPresent(s -> serviceTable.getSelectionModel().select(s));
                     }
+                    busyIndicator.setVisible(false);
+                    busyIndicator.setManaged(false);
                     statusLabel.setText(services.size() + " services");
                 });
             } catch (Exception e) {
-                Platform.runLater(() -> statusLabel.setText("Failed to load services: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    busyIndicator.setVisible(false);
+                    busyIndicator.setManaged(false);
+                    statusLabel.setText("Failed to load services: " + e.getMessage());
+                });
             }
         }, "service-list");
         worker.setDaemon(true);

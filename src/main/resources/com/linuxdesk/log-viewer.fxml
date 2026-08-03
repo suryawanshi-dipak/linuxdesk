@@ -24,9 +24,9 @@
                 <RadioButton fx:id="fileRadio" text="Log File"/>
                 <TextField fx:id="pathField" promptText="/var/log/syslog" prefWidth="220" disable="true"/>
                 <Region HBox.hgrow="ALWAYS"/>
-                <Button text="Start" onAction="#onStart" styleClass="primary-button"/>
-                <Button text="Stop" onAction="#onStop" styleClass="secondary-button"/>
-                <Button text="Clear" onAction="#onClear" styleClass="secondary-button"/>
+                <Button text="▶ Start" onAction="#onStart" styleClass="primary-button"/>
+                <Button text="■ Stop" onAction="#onStop" styleClass="secondary-button"/>
+                <Button text="⌫ Clear" onAction="#onClear" styleClass="secondary-button"/>
             </HBox>
             <HBox spacing="10" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
                 <padding>

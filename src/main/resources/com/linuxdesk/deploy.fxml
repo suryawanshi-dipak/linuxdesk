@@ -5,6 +5,7 @@
 <?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ChoiceBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ProgressIndicator?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextArea?>
@@ -26,7 +27,7 @@
                 <Label text="Local" styleClass="field-label"/>
                 <TextField fx:id="localPathField" editable="false" promptText="Choose a local folder..."
                            styleClass="field-input" HBox.hgrow="ALWAYS"/>
-                <Button text="Browse..." onAction="#onBrowseLocal" styleClass="secondary-button"/>
+                <Button text="… Browse" onAction="#onBrowseLocal" styleClass="secondary-button"/>
             </HBox>
             <HBox spacing="10" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
                 <padding>
@@ -35,7 +36,7 @@
                 <Label text="Remote" styleClass="field-label"/>
                 <TextField fx:id="remotePathField" styleClass="field-input" HBox.hgrow="ALWAYS"/>
                 <Label fx:id="productionBadge" text="PRODUCTION" styleClass="production-badge" visible="false" managed="false"/>
-                <Button fx:id="compareButton" text="Compare" onAction="#onCompare" styleClass="primary-button"/>
+                <Button fx:id="compareButton" text="⇄ Compare" onAction="#onCompare" styleClass="primary-button"/>
             </HBox>
             <HBox spacing="10" alignment="CENTER_LEFT" styleClass="desktop-toolbar">
                 <padding>
@@ -44,7 +45,7 @@
                 <Label text="Ignore" styleClass="field-label"/>
                 <TextArea fx:id="ignorePatternsArea" styleClass="field-input" prefRowCount="3" wrapText="false"
                           HBox.hgrow="ALWAYS"/>
-                <Button text="Import .gitignore" onAction="#onImportGitignore" styleClass="secondary-button"/>
+                <Button text="… Import .gitignore" onAction="#onImportGitignore" styleClass="secondary-button"/>
             </HBox>
             <TitledPane text="Hooks &amp; Health Check (optional)" expanded="false" styleClass="deploy-advanced-pane">
                 <VBox spacing="8">
@@ -84,12 +85,14 @@
                 <padding>
                     <Insets top="6" right="16" bottom="10" left="16"/>
                 </padding>
-                <Button fx:id="selectAllButton" text="Select All" onAction="#onSelectAll" styleClass="secondary-button"/>
-                <Button fx:id="selectNoneButton" text="Select None" onAction="#onSelectNone" styleClass="secondary-button"/>
+                <Button fx:id="selectAllButton" text="☑ Select All" onAction="#onSelectAll" styleClass="secondary-button"/>
+                <Button fx:id="selectNoneButton" text="☐ Select None" onAction="#onSelectNone" styleClass="secondary-button"/>
                 <CheckBox fx:id="dryRunCheck" text="Dry run"/>
-                <Button fx:id="rollbackButton" text="Rollback" onAction="#onRollback" styleClass="secondary-button" disable="true"/>
-                <Button fx:id="deployButton" text="Deploy Selected" onAction="#onDeploySelected" styleClass="primary-button" disable="true"/>
+                <Button fx:id="rollbackButton" text="⟲ Rollback" onAction="#onRollback" styleClass="secondary-button" disable="true"/>
+                <Button fx:id="deployButton" text="⬆ Deploy Selected" onAction="#onDeploySelected" styleClass="primary-button" disable="true"/>
                 <Region HBox.hgrow="ALWAYS"/>
+                <ProgressIndicator fx:id="busyIndicator" styleClass="spinner" prefWidth="14" prefHeight="14"
+                                   visible="false" managed="false"/>
                 <Label fx:id="statusLabel" styleClass="status-label"/>
             </HBox>
         </VBox>

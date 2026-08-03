@@ -16,13 +16,17 @@ import javafx.stage.Stage;
 public class TitleBar extends HBox {
 
     public TitleBar(Stage stage, Scene scene) {
+        this(stage, scene, "LinuxDesk");
+    }
+
+    public TitleBar(Stage stage, Scene scene, String titleText) {
         getStyleClass().add("title-bar");
         setPrefHeight(38);
 
         Label icon = new Label("⌘");
         icon.getStyleClass().add("title-bar-icon");
 
-        Label title = new Label("LinuxDesk");
+        Label title = new Label(titleText);
         title.getStyleClass().add("title-bar-label");
 
         HBox dragArea = new HBox(8, icon, title);

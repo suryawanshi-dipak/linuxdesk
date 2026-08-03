@@ -6,6 +6,7 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.ProgressIndicator?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.layout.BorderPane?>
@@ -115,6 +116,8 @@
                     <Label text="EQUIVALENT TO" styleClass="equivalent-tag"/>
                     <Label fx:id="commandPreviewLabel" styleClass="command-preview"/>
                     <Region HBox.hgrow="ALWAYS"/>
+                    <ProgressIndicator fx:id="busyIndicator" styleClass="spinner" prefWidth="14" prefHeight="14"
+                                       visible="false" managed="false"/>
                     <Label fx:id="statusLabel" styleClass="status-label"/>
                 </HBox>
 

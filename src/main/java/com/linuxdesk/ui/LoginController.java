@@ -24,6 +24,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.PasswordField;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
@@ -74,6 +75,7 @@ public class LoginController {
     @FXML private PasswordField loginPasswordField;
     @FXML private Label commandPreviewLabel;
     @FXML private Label statusLabel;
+    @FXML private ProgressIndicator busyIndicator;
     @FXML private Button testConnectionButton;
     @FXML private Button browseButton;
 
@@ -381,7 +383,7 @@ public class LoginController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "Clear all connection history? This cannot be undone.",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button == ButtonType.YES) {
@@ -436,7 +438,7 @@ public class LoginController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "Delete profile \"" + selected.displayName() + "\"? This cannot be undone.",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button != ButtonType.YES) {
@@ -504,6 +506,8 @@ public class LoginController {
         String password = loginPasswordField.getText();
 
         testConnectionButton.setDisable(true);
+        busyIndicator.setVisible(true);
+        busyIndicator.setManaged(true);
         showStatus("Connecting...", false);
 
         Thread worker = new Thread(() -> attemptConnect(profile, passphrase, password), "ssh-connect");
@@ -529,6 +533,8 @@ public class LoginController {
                     DesktopController controller = App.loadScene("/com/linuxdesk/desktop.fxml", 1024, 680);
                     controller.init(sessionManager, profile, rootPath);
                 } catch (Exception e) {
+                    busyIndicator.setVisible(false);
+                    busyIndicator.setManaged(false);
                     showStatus("Connected, but failed to open desktop: " + e.getMessage(), true);
                     testConnectionButton.setDisable(false);
                     sessionManager.close();
@@ -538,6 +544,8 @@ public class LoginController {
             auditLogStore.record(profile.getHost(), profile.getUsername(), "Connect", "failure", e.getMessage());
             sessionManager.close();
             Platform.runLater(() -> {
+                busyIndicator.setVisible(false);
+                busyIndicator.setManaged(false);
                 showStatus("Connection failed: " + e.getMessage(), true);
                 testConnectionButton.setDisable(false);
             });
@@ -582,7 +590,7 @@ public class LoginController {
             ButtonType trustType = new ButtonType("Trust and Connect", ButtonBar.ButtonData.OK_DONE);
             ButtonType cancelType = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
             alert.getButtonTypes().setAll(cancelType, trustType);
-            ThemeManager.apply(alert.getDialogPane());
+            ThemeManager.apply(alert);
             ((Button) alert.getDialogPane().lookupButton(cancelType)).setDefaultButton(true);
             ((Button) alert.getDialogPane().lookupButton(trustType)).setDefaultButton(false);
 
@@ -625,7 +633,7 @@ public class LoginController {
             ButtonType trustType = new ButtonType("Trust New Key (unsafe)", ButtonBar.ButtonData.OK_DONE);
             ButtonType cancelType = new ButtonType("Cancel — Stay Safe", ButtonBar.ButtonData.CANCEL_CLOSE);
             alert.getButtonTypes().setAll(cancelType, trustType);
-            ThemeManager.apply(alert.getDialogPane());
+            ThemeManager.apply(alert);
 
             Button trustButton = (Button) alert.getDialogPane().lookupButton(trustType);
             Button cancelButton = (Button) alert.getDialogPane().lookupButton(cancelType);

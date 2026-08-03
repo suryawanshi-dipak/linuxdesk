@@ -2,6 +2,10 @@ package com.linuxdesk.ui;
 
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Dialog;
+import javafx.scene.layout.BorderPane;
+import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 
 import java.util.prefs.Preferences;
 
@@ -34,6 +38,28 @@ public final class ThemeManager {
 
     public static void apply(Parent root) {
         root.getStylesheets().setAll(stylesheetUrl());
+    }
+
+    /**
+     * Themes a Dialog/Alert AND replaces its native title bar with the app's own — the OS chrome is
+     * always light and clashes with the dark UI, same reasoning as {@link TitleBar}. Also drops the
+     * default alert-type graphic (question mark / warning triangle / etc.), which doesn't match the
+     * app's flat look.
+     */
+    public static void apply(Dialog<?> dialog) {
+        apply(dialog.getDialogPane());
+        dialog.getDialogPane().setGraphic(null);
+        dialog.initStyle(StageStyle.UNDECORATED);
+        dialog.setOnShowing(event -> {
+            Scene scene = dialog.getDialogPane().getScene();
+            Stage stage = (Stage) scene.getWindow();
+            Parent original = scene.getRoot();
+            BorderPane shell = new BorderPane(original);
+            scene.setRoot(shell);
+            apply(scene);
+            String title = dialog.getTitle() == null || dialog.getTitle().isBlank() ? "LinuxDesk" : dialog.getTitle();
+            shell.setTop(new TitleBar(stage, scene, title));
+        });
     }
 
     public static void toggle(Scene scene) {

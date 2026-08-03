@@ -2,6 +2,7 @@ package com.linuxdesk;
 
 import com.linuxdesk.ui.ThemeManager;
 import com.linuxdesk.ui.TitleBar;
+import com.linuxdesk.ui.WindowFx;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -43,6 +44,7 @@ public class App extends Application {
         ThemeManager.apply(scene);
 
         shell.setTop(new TitleBar(primaryStage, scene));
+        WindowFx.fadeIn(content);
 
         primaryStage.setScene(scene);
         primaryStage.centerOnScreen();

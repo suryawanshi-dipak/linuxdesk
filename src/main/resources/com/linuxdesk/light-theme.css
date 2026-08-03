@@ -92,6 +92,14 @@
     -fx-border-color: #3d7bd9;
 }
 
+.text-area.field-input .content {
+    -fx-background-color: #f7f8fa;
+}
+
+.text-area.field-input .text {
+    -fx-fill: #1a1d24;
+}
+
 .equivalent-tag {
     -fx-text-fill: #9aa0ab;
     -fx-font-size: 10px;
@@ -732,4 +740,196 @@
 .table-cell.diff-status-remote-only {
     -fx-text-fill: #1f9d55;
     -fx-font-weight: bold;
+}
+
+/* ---------- Form controls (unstyled by default: checkbox/radio/choice) ---------- */
+
+.check-box, .radio-button {
+    -fx-text-fill: #2a2d34;
+    -fx-font-size: 12px;
+}
+
+.check-box .box {
+    -fx-background-color: #f7f8fa;
+    -fx-border-color: #d7dae0;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 2;
+}
+
+.check-box:hover .box {
+    -fx-border-color: #3d7bd9;
+}
+
+.check-box:selected .box {
+    -fx-background-color: #d9e6fb;
+    -fx-border-color: #3d7bd9;
+}
+
+.check-box .mark {
+    -fx-background-color: #1a1d24;
+}
+
+.radio-button .radio {
+    -fx-background-color: #f7f8fa;
+    -fx-border-color: #d7dae0;
+    -fx-padding: 4px;
+}
+
+.radio-button:hover .radio {
+    -fx-border-color: #3d7bd9;
+}
+
+.radio-button:selected .radio {
+    -fx-border-color: #3d7bd9;
+}
+
+.radio-button .dot {
+    -fx-background-color: transparent;
+}
+
+.radio-button:selected .dot {
+    -fx-background-color: #3d7bd9;
+}
+
+.choice-box {
+    -fx-background-color: #f7f8fa;
+    -fx-border-color: #d7dae0;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 4 6 4 6;
+    -fx-mark-color: #6b7280;
+}
+
+.choice-box:hover {
+    -fx-border-color: #3d7bd9;
+}
+
+.choice-box .label {
+    -fx-text-fill: #1a1d24;
+    -fx-font-size: 12px;
+}
+
+/* ---------- Popup menus (context menus, choice-box dropdown) ---------- */
+
+.context-menu {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e0e2e7;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 4;
+    -fx-effect: dropshadow(gaussian, rgba(20,20,30,0.18), 18, 0.2, 0, 6);
+}
+
+.menu-item {
+    -fx-background-color: transparent;
+    -fx-background-radius: 4;
+    -fx-padding: 6 10 6 10;
+}
+
+.menu-item .label {
+    -fx-text-fill: #2a2d34;
+    -fx-font-size: 12px;
+}
+
+.menu-item:focused {
+    -fx-background-color: #eceef2;
+}
+
+.menu-item:disabled .label {
+    -fx-opacity: 0.5;
+}
+
+.context-menu .separator .line {
+    -fx-border-color: #e0e2e7 transparent transparent transparent;
+}
+
+/* ---------- Tooltip ---------- */
+
+.tooltip {
+    -fx-background-color: #2a2d34;
+    -fx-text-fill: #f4f5f7;
+    -fx-border-color: #1a1d24;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 6 9 6 9;
+    -fx-font-size: 11px;
+}
+
+/* ---------- Scroll bars ---------- */
+
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .track {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #d7dae0;
+    -fx-background-radius: 6;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #c2c6ce;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-background-color: #9aa0ab;
+}
+
+/* ---------- Table empty state ---------- */
+
+.table-view .placeholder .label {
+    -fx-text-fill: #9aa0ab;
+    -fx-font-size: 12px;
+}
+
+/* ---------- Progress bar / spinner ---------- */
+
+.transfer-progress-bar > .bar {
+    -fx-background-color: #3d7bd9;
+    -fx-background-insets: 0;
+    -fx-background-radius: 3;
+    -fx-padding: 5px;
+}
+
+.transfer-progress-bar > .track {
+    -fx-background-color: #f7f8fa;
+    -fx-background-insets: 0;
+    -fx-background-radius: 3;
+    -fx-border-color: #d7dae0;
+    -fx-border-radius: 3;
+}
+
+.spinner {
+    -fx-progress-color: #3d7bd9;
+}
+
+.spinner .percentage {
+    -fx-fill: transparent;
+}
+
+/* ---------- Pressed feedback ---------- */
+
+.primary-button:pressed,
+.secondary-button:pressed,
+.view-toggle-button:pressed,
+.taskbar-start-button:pressed,
+.sidebar-toggle-button:pressed,
+.title-bar-btn:pressed,
+.title-bar-theme-btn:pressed,
+.start-menu-item:pressed,
+.search-result-row:pressed {
+    -fx-scale-x: 0.97;
+    -fx-scale-y: 0.97;
 }

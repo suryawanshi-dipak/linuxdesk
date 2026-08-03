@@ -6,6 +6,7 @@ import com.linuxdesk.audit.AuditRecorder;
 import com.linuxdesk.model.ConnectionProfile;
 import com.linuxdesk.profile.RecentPathsStore;
 import com.linuxdesk.ssh.ArchiveFormat;
+import com.linuxdesk.ssh.ProgressListener;
 import com.linuxdesk.ssh.RemoteEntry;
 import com.linuxdesk.ssh.SshSessionManager;
 import javafx.application.Platform;
@@ -22,6 +23,8 @@ import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ProgressBar;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
@@ -34,6 +37,7 @@ import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
@@ -43,6 +47,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Popup;
 import javafx.stage.PopupWindow;
 import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 import javafx.stage.Window;
 
 import java.io.File;
@@ -64,6 +69,8 @@ public class DesktopController {
     @FXML private FlowPane iconGrid;
     @FXML private ScrollPane scrollPane;
     @FXML private Label statusLabel;
+    @FXML private ProgressBar transferProgressBar;
+    @FXML private ProgressIndicator busyIndicator;
     @FXML private Button startButton;
     @FXML private TextField searchField;
 
@@ -337,43 +344,43 @@ public class DesktopController {
         card.getStyleClass().add("start-menu");
         ThemeManager.apply(card);
 
-        Button taskManagerItem = startMenuItem("Task Manager");
+        Button taskManagerItem = startMenuItem("▤  Task Manager");
         taskManagerItem.setOnAction(e -> {
             popup.hide();
             onOpenTaskManager();
         });
 
-        Button terminalItem = startMenuItem("Terminal");
+        Button terminalItem = startMenuItem("▶  Terminal");
         terminalItem.setOnAction(e -> {
             popup.hide();
             onOpenTerminal();
         });
 
-        Button logViewerItem = startMenuItem("Log Viewer");
+        Button logViewerItem = startMenuItem("☰  Log Viewer");
         logViewerItem.setOnAction(e -> {
             popup.hide();
             onOpenLogViewer();
         });
 
-        Button monitorItem = startMenuItem("Monitor");
+        Button monitorItem = startMenuItem("◔  Monitor");
         monitorItem.setOnAction(e -> {
             popup.hide();
             onOpenMonitor();
         });
 
-        Button deployItem = startMenuItem("Deploy");
+        Button deployItem = startMenuItem("⬆  Deploy");
         deployItem.setOnAction(e -> {
             popup.hide();
             onOpenDeploy();
         });
 
-        Button auditLogItem = startMenuItem("Audit Log");
+        Button auditLogItem = startMenuItem("✓  Audit Log");
         auditLogItem.setOnAction(e -> {
             popup.hide();
             onOpenAuditLog();
         });
 
-        Button disconnectItem = startMenuItem("Disconnect");
+        Button disconnectItem = startMenuItem("✕  Disconnect");
         disconnectItem.setOnAction(e -> {
             popup.hide();
             onDisconnect();
@@ -395,17 +402,17 @@ public class DesktopController {
     private ContextMenu createBackgroundContextMenu() {
         ContextMenu menu = new ContextMenu();
 
-        MenuItem refreshItem = new MenuItem("Refresh");
+        MenuItem refreshItem = new MenuItem("⟳ Refresh");
         refreshItem.setOnAction(e -> navigateTo(currentPath, false));
 
-        Menu newMenu = new Menu("New");
+        Menu newMenu = new Menu("+ New");
         MenuItem newFolderItem = new MenuItem("Folder...");
         newFolderItem.setOnAction(e -> createNewFolder());
         MenuItem newFileItem = new MenuItem("File...");
         newFileItem.setOnAction(e -> createNewFile());
         newMenu.getItems().addAll(newFolderItem, newFileItem);
 
-        Menu sortMenu = new Menu("Sort by");
+        Menu sortMenu = new Menu("⇅ Sort by");
         ToggleGroup sortGroup = new ToggleGroup();
         RadioMenuItem sortByName = new RadioMenuItem("Name");
         sortByName.setToggleGroup(sortGroup);
@@ -421,10 +428,10 @@ public class DesktopController {
         pasteItem.setDisable(clipboardEntry == null);
         pasteItem.setOnAction(e -> pasteClipboard());
 
-        MenuItem terminalItem = new MenuItem("Open Terminal Here");
+        MenuItem terminalItem = new MenuItem("▶ Open Terminal Here");
         terminalItem.setOnAction(e -> openTerminalWindow(currentPath));
 
-        Menu uploadMenu = new Menu("Upload");
+        Menu uploadMenu = new Menu("⬆ Upload");
         MenuItem uploadFileItem = new MenuItem("File...");
         uploadFileItem.setOnAction(e -> uploadLocalFile());
         MenuItem uploadFolderItem = new MenuItem("Folder...");
@@ -481,7 +488,7 @@ public class DesktopController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "\"" + localFile.getName() + "\" already exists in this folder. Replace it?",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button == ButtonType.YES) {
@@ -494,17 +501,61 @@ public class DesktopController {
 
     private void performUpload(File localFile, String remotePath) {
         statusLabel.setText("Uploading " + localFile.getName() + "...");
+        showTransferProgress();
 
         Thread worker = new Thread(() -> {
             try {
-                sessionManager.upload(localFile, remotePath);
-                Platform.runLater(() -> navigateTo(currentPath, false));
+                sessionManager.upload(localFile, remotePath, throttledProgress());
+                Platform.runLater(() -> {
+                    hideTransferProgress();
+                    navigateTo(currentPath, false);
+                });
             } catch (Exception e) {
-                Platform.runLater(() -> statusLabel.setText("Upload failed: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    hideTransferProgress();
+                    statusLabel.setText("Upload failed: " + e.getMessage());
+                });
             }
         }, "sftp-upload");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    /** Shows the determinate transfer bar, reset to 0%, for an upload/download about to start. */
+    private void showTransferProgress() {
+        transferProgressBar.setProgress(0);
+        transferProgressBar.setVisible(true);
+        transferProgressBar.setManaged(true);
+    }
+
+    private void hideTransferProgress() {
+        transferProgressBar.setVisible(false);
+        transferProgressBar.setManaged(false);
+    }
+
+    /** Shows a small indeterminate spinner next to the status label for operations with no byte-level progress. */
+    private void showBusy() {
+        busyIndicator.setVisible(true);
+        busyIndicator.setManaged(true);
+    }
+
+    private void hideBusy() {
+        busyIndicator.setVisible(false);
+        busyIndicator.setManaged(false);
+    }
+
+    /** A ProgressListener that marshals updates to the FX thread, throttled to ~10/sec so large transfers don't flood it. */
+    private ProgressListener throttledProgress() {
+        long[] lastUpdateMs = {0};
+        return (transferred, total) -> {
+            long now = System.currentTimeMillis();
+            boolean finished = total <= 0 || transferred >= total;
+            if (finished || now - lastUpdateMs[0] >= 100) {
+                lastUpdateMs[0] = now;
+                double ratio = total <= 0 ? 0 : (double) transferred / total;
+                Platform.runLater(() -> transferProgressBar.setProgress(ratio));
+            }
+        };
     }
 
     private void downloadEntry(RemoteEntry entry) {
@@ -523,7 +574,7 @@ public class DesktopController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "\"" + entry.name() + "\" already exists at that location. Replace it?",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button == ButtonType.YES) {
@@ -536,13 +587,20 @@ public class DesktopController {
 
     private void performDownload(RemoteEntry entry, File localTarget) {
         statusLabel.setText("Downloading " + entry.name() + "...");
+        showTransferProgress();
 
         Thread worker = new Thread(() -> {
             try {
-                sessionManager.download(entry, localTarget);
-                Platform.runLater(() -> statusLabel.setText("Downloaded " + entry.name()));
+                sessionManager.download(entry, localTarget, throttledProgress());
+                Platform.runLater(() -> {
+                    hideTransferProgress();
+                    statusLabel.setText("Downloaded " + entry.name());
+                });
             } catch (Exception e) {
-                Platform.runLater(() -> statusLabel.setText("Download failed: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    hideTransferProgress();
+                    statusLabel.setText("Download failed: " + e.getMessage());
+                });
             }
         }, "sftp-download");
         worker.setDaemon(true);
@@ -560,7 +618,7 @@ public class DesktopController {
 
     private void createNewFolder() {
         TextInputDialog dialog = new TextInputDialog("New Folder");
-        ThemeManager.apply(dialog.getDialogPane());
+        ThemeManager.apply(dialog);
         dialog.setHeaderText(null);
         dialog.setTitle("New Folder");
         dialog.setContentText("Folder name:");
@@ -587,7 +645,7 @@ public class DesktopController {
 
     private void createNewFile() {
         TextInputDialog dialog = new TextInputDialog("New File.txt");
-        ThemeManager.apply(dialog.getDialogPane());
+        ThemeManager.apply(dialog);
         dialog.setHeaderText(null);
         dialog.setTitle("New File");
         dialog.setContentText("File name:");
@@ -638,17 +696,34 @@ public class DesktopController {
         openTerminalWindow(null);
     }
 
+    /**
+     * Builds an undecorated, themed stage with the same custom title bar as the main window
+     * (native OS chrome is always light and clashes with the dark theme). Edge-drag resizing is
+     * intentionally lost here, the same trade-off the main window already accepts.
+     */
+    private Stage buildWindowStage(Parent content, double width, double height, String title) {
+        BorderPane shell = new BorderPane();
+        shell.setCenter(content);
+
+        Scene scene = new Scene(shell, width, height);
+        ThemeManager.apply(scene);
+        WindowFx.fadeIn(content);
+
+        Stage stage = new Stage();
+        stage.initStyle(StageStyle.UNDECORATED);
+        stage.initOwner(iconGrid.getScene().getWindow());
+        stage.setTitle(title);
+        stage.setScene(scene);
+        shell.setTop(new TitleBar(stage, scene, title));
+        return stage;
+    }
+
     private void openTerminalWindow(String initialDirectory) {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/terminal.fxml"));
             Parent root = loader.load();
 
-            Scene scene = new Scene(root, 760, 480);
-            ThemeManager.apply(scene);
-
-            Stage terminalStage = new Stage();
-            terminalStage.initOwner(iconGrid.getScene().getWindow());
-            terminalStage.setScene(scene);
+            Stage terminalStage = buildWindowStage(root, 760, 480, hostLabel.getText() + " — Terminal");
 
             TerminalController controller = loader.getController();
             controller.init(sessionManager, hostLabel.getText(), initialDirectory, terminalStage);
@@ -664,12 +739,7 @@ public class DesktopController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/task-manager.fxml"));
             Parent root = loader.load();
 
-            Scene scene = new Scene(root, 720, 480);
-            ThemeManager.apply(scene);
-
-            Stage taskManagerStage = new Stage();
-            taskManagerStage.initOwner(iconGrid.getScene().getWindow());
-            taskManagerStage.setScene(scene);
+            Stage taskManagerStage = buildWindowStage(root, 860, 480, "Task Manager");
 
             TaskManagerController controller = loader.getController();
             controller.init(sessionManager, taskManagerStage, auditRecorder);
@@ -685,12 +755,7 @@ public class DesktopController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/log-viewer.fxml"));
             Parent root = loader.load();
 
-            Scene scene = new Scene(root, 820, 520);
-            ThemeManager.apply(scene);
-
-            Stage logViewerStage = new Stage();
-            logViewerStage.initOwner(iconGrid.getScene().getWindow());
-            logViewerStage.setScene(scene);
+            Stage logViewerStage = buildWindowStage(root, 820, 520, "Log Viewer");
 
             LogViewerController controller = loader.getController();
             controller.init(sessionManager, logViewerStage);
@@ -706,12 +771,7 @@ public class DesktopController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/monitor.fxml"));
             Parent root = loader.load();
 
-            Scene scene = new Scene(root, 780, 560);
-            ThemeManager.apply(scene);
-
-            Stage monitorStage = new Stage();
-            monitorStage.initOwner(iconGrid.getScene().getWindow());
-            monitorStage.setScene(scene);
+            Stage monitorStage = buildWindowStage(root, 780, 560, "Monitor");
 
             MonitorController controller = loader.getController();
             controller.init(sessionManager, monitorStage);
@@ -727,12 +787,7 @@ public class DesktopController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/deploy.fxml"));
             Parent root = loader.load();
 
-            Scene scene = new Scene(root, 900, 560);
-            ThemeManager.apply(scene);
-
-            Stage deployStage = new Stage();
-            deployStage.initOwner(iconGrid.getScene().getWindow());
-            deployStage.setScene(scene);
+            Stage deployStage = buildWindowStage(root, 900, 560, "Deploy");
 
             DeployController controller = loader.getController();
             controller.init(sessionManager, deployStage, currentPath, auditHost, production, auditRecorder);
@@ -762,12 +817,7 @@ public class DesktopController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/audit-log.fxml"));
             Parent root = loader.load();
 
-            Scene scene = new Scene(root, 900, 520);
-            ThemeManager.apply(scene);
-
-            Stage auditStage = new Stage();
-            auditStage.initOwner(iconGrid.getScene().getWindow());
-            auditStage.setScene(scene);
+            Stage auditStage = buildWindowStage(root, 900, 520, "Audit Log");
 
             AuditLogController controller = loader.getController();
             controller.init(auditStage);
@@ -937,15 +987,16 @@ public class DesktopController {
         MenuItem renameItem = new MenuItem("Rename");
         renameItem.setOnAction(e -> renameEntry(entry));
 
-        MenuItem deleteItem = new MenuItem("Delete");
+        MenuItem deleteItem = new MenuItem("✕ Delete");
         deleteItem.setOnAction(e -> deleteEntry(entry));
 
-        MenuItem downloadItem = new MenuItem("Download...");
+        MenuItem downloadItem = new MenuItem("⬇ Download...");
         downloadItem.setOnAction(e -> downloadEntry(entry));
 
         MenuItem permissionsItem = new MenuItem("Permissions...");
         permissionsItem.setOnAction(e -> PermissionsDialog.show(sessionManager, entry, ownerWindow(),
-                statusLabel::setText, () -> navigateTo(currentPath, false), auditRecorder));
+                statusLabel::setText, busy -> { if (busy) showBusy(); else hideBusy(); },
+                () -> navigateTo(currentPath, false), auditRecorder));
 
         Menu compressMenu = new Menu("Compress to");
         MenuItem zipItem = new MenuItem("Zip");
@@ -1008,7 +1059,7 @@ public class DesktopController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "\"" + archiveName + "\" already exists in this folder. Replace it?",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button == ButtonType.YES) {
@@ -1021,13 +1072,20 @@ public class DesktopController {
 
     private void performCompress(RemoteEntry entry, ArchiveFormat format, String archiveName, String parentDir) {
         statusLabel.setText("Compressing " + entry.name() + "...");
+        showBusy();
 
         Thread worker = new Thread(() -> {
             try {
                 sessionManager.compress(parentDir, entry.name(), archiveName, format);
-                Platform.runLater(() -> navigateTo(currentPath, false));
+                Platform.runLater(() -> {
+                    hideBusy();
+                    navigateTo(currentPath, false);
+                });
             } catch (Exception e) {
-                Platform.runLater(() -> statusLabel.setText("Compress failed: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    hideBusy();
+                    statusLabel.setText("Compress failed: " + e.getMessage());
+                });
             }
         }, "sftp-compress");
         worker.setDaemon(true);
@@ -1058,7 +1116,7 @@ public class DesktopController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "A folder named \"" + destName + "\" already exists. Extract into it anyway (matching files may be overwritten)?",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button == ButtonType.YES) {
@@ -1071,13 +1129,20 @@ public class DesktopController {
 
     private void performExtract(RemoteEntry entry, String destPath) {
         statusLabel.setText("Extracting " + entry.name() + "...");
+        showBusy();
 
         Thread worker = new Thread(() -> {
             try {
                 sessionManager.extractArchive(entry.path(), destPath);
-                Platform.runLater(() -> navigateTo(currentPath, false));
+                Platform.runLater(() -> {
+                    hideBusy();
+                    navigateTo(currentPath, false);
+                });
             } catch (Exception e) {
-                Platform.runLater(() -> statusLabel.setText("Extract failed: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    hideBusy();
+                    statusLabel.setText("Extract failed: " + e.getMessage());
+                });
             }
         }, "sftp-extract");
         worker.setDaemon(true);
@@ -1091,14 +1156,21 @@ public class DesktopController {
         RemoteEntry source = clipboardEntry;
         String targetDir = currentPath;
         statusLabel.setText("Pasting " + source.name() + "...");
+        showBusy();
 
         Thread worker = new Thread(() -> {
             try {
                 String destPath = buildPastePath(source, targetDir);
                 sessionManager.copy(source, destPath);
-                Platform.runLater(() -> navigateTo(currentPath, false));
+                Platform.runLater(() -> {
+                    hideBusy();
+                    navigateTo(currentPath, false);
+                });
             } catch (Exception e) {
-                Platform.runLater(() -> statusLabel.setText("Paste failed: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    hideBusy();
+                    statusLabel.setText("Paste failed: " + e.getMessage());
+                });
             }
         }, "sftp-copy");
         worker.setDaemon(true);
@@ -1130,7 +1202,7 @@ public class DesktopController {
 
     private void renameEntry(RemoteEntry entry) {
         TextInputDialog dialog = new TextInputDialog(entry.name());
-        ThemeManager.apply(dialog.getDialogPane());
+        ThemeManager.apply(dialog);
         dialog.setHeaderText(null);
         dialog.setTitle("Rename");
         dialog.setContentText("New name:");
@@ -1168,7 +1240,7 @@ public class DesktopController {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                 "\"" + newName + "\" already exists in this folder. Replace it?",
                 ButtonType.YES, ButtonType.NO);
-        ThemeManager.apply(confirm.getDialogPane());
+        ThemeManager.apply(confirm);
         confirm.setHeaderText(null);
         confirm.showAndWait().ifPresent(button -> {
             if (button != ButtonType.YES) {
@@ -1197,7 +1269,7 @@ public class DesktopController {
             Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
                     "Delete " + entry.name() + "? This cannot be undone.",
                     ButtonType.YES, ButtonType.NO);
-            ThemeManager.apply(confirm.getDialogPane());
+            ThemeManager.apply(confirm);
             confirm.setHeaderText(null);
             confirm.showAndWait().ifPresent(button -> {
                 if (button == ButtonType.YES) {
@@ -1210,7 +1282,7 @@ public class DesktopController {
     /** Production-tagged profiles require typing the folder name for a recursive delete, not just a click-through. */
     private void confirmProductionDelete(RemoteEntry entry) {
         TextInputDialog dialog = new TextInputDialog();
-        ThemeManager.apply(dialog.getDialogPane());
+        ThemeManager.apply(dialog);
         dialog.setHeaderText(null);
         dialog.setTitle("Confirm delete on production host");
         dialog.setContentText("This is a PRODUCTION host. Deleting \"" + entry.name()
@@ -1227,6 +1299,7 @@ public class DesktopController {
 
     private void performDelete(RemoteEntry entry) {
         statusLabel.setText("Deleting " + entry.name() + "...");
+        showBusy();
 
         String kind = entry.directory() ? "folder" : "file";
         Thread worker = new Thread(() -> {
@@ -1234,6 +1307,7 @@ public class DesktopController {
                 sessionManager.delete(entry);
                 logAudit("Delete " + kind + " " + entry.path(), "success", null);
                 Platform.runLater(() -> {
+                    hideBusy();
                     if (entry.equals(clipboardEntry)) {
                         clipboardEntry = null;
                     }
@@ -1241,7 +1315,10 @@ public class DesktopController {
                 });
             } catch (Exception e) {
                 logAudit("Delete " + kind + " " + entry.path(), "failure", e.getMessage());
-                Platform.runLater(() -> statusLabel.setText("Delete failed: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    hideBusy();
+                    statusLabel.setText("Delete failed: " + e.getMessage());
+                });
             }
         }, "sftp-delete");
         worker.setDaemon(true);
@@ -1273,13 +1350,7 @@ public class DesktopController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/linuxdesk/editor.fxml"));
             Parent root = loader.load();
 
-            Scene scene = new Scene(root, 800, 600);
-            ThemeManager.apply(scene);
-
-            Stage editorStage = new Stage();
-            editorStage.setTitle(entry.name() + " — LinuxDesk");
-            editorStage.initOwner(iconGrid.getScene().getWindow());
-            editorStage.setScene(scene);
+            Stage editorStage = buildWindowStage(root, 800, 600, entry.name() + " — LinuxDesk");
 
             EditorController controller = loader.getController();
             controller.init(sessionManager, entry, content, editorStage);

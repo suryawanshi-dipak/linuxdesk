@@ -31,17 +31,28 @@ final class PermissionsDialog {
 
     static void show(SshSessionManager sessionManager, RemoteEntry entry, Window owner,
                       Consumer<String> statusUpdater, Runnable onApplied, AuditRecorder auditRecorder) {
+        show(sessionManager, entry, owner, statusUpdater, busy -> { }, onApplied, auditRecorder);
+    }
+
+    static void show(SshSessionManager sessionManager, RemoteEntry entry, Window owner,
+                      Consumer<String> statusUpdater, Consumer<Boolean> busyUpdater, Runnable onApplied,
+                      AuditRecorder auditRecorder) {
         statusUpdater.accept("Loading permissions for " + entry.name() + "...");
+        busyUpdater.accept(true);
 
         Thread worker = new Thread(() -> {
             try {
                 RemotePermissions current = sessionManager.getPermissions(entry.path());
                 Platform.runLater(() -> {
+                    busyUpdater.accept(false);
                     statusUpdater.accept("");
-                    open(sessionManager, entry, owner, current, statusUpdater, onApplied, auditRecorder);
+                    open(sessionManager, entry, owner, current, statusUpdater, busyUpdater, onApplied, auditRecorder);
                 });
             } catch (Exception e) {
-                Platform.runLater(() -> statusUpdater.accept("Failed to load permissions: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    busyUpdater.accept(false);
+                    statusUpdater.accept("Failed to load permissions: " + e.getMessage());
+                });
             }
         }, "sftp-permissions-load");
         worker.setDaemon(true);
@@ -49,13 +60,13 @@ final class PermissionsDialog {
     }
 
     private static void open(SshSessionManager sessionManager, RemoteEntry entry, Window owner,
-                              RemotePermissions current, Consumer<String> statusUpdater, Runnable onApplied,
-                              AuditRecorder auditRecorder) {
+                              RemotePermissions current, Consumer<String> statusUpdater, Consumer<Boolean> busyUpdater,
+                              Runnable onApplied, AuditRecorder auditRecorder) {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.setTitle("Permissions — " + entry.name());
         dialog.setHeaderText(null);
-        ThemeManager.apply(dialog.getDialogPane());
+        ThemeManager.apply(dialog);
 
         ButtonType applyButtonType = new ButtonType("Apply", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(applyButtonType, ButtonType.CANCEL);
@@ -201,10 +212,10 @@ final class PermissionsDialog {
 
             if (recursive) {
                 confirmRecursiveThenApply(sessionManager, entry, newOctal, newOwner, newGroup,
-                        ownershipChanged, statusUpdater, onApplied, auditRecorder);
+                        ownershipChanged, statusUpdater, busyUpdater, onApplied, auditRecorder);
             } else {
                 applyChanges(sessionManager, entry, newOctal, newOwner, newGroup, ownershipChanged, false,
-                        statusUpdater, onApplied, auditRecorder);
+                        statusUpdater, busyUpdater, onApplied, auditRecorder);
             }
         });
     }
@@ -229,9 +240,10 @@ final class PermissionsDialog {
     }
 
     private static void confirmRecursiveThenApply(SshSessionManager sessionManager, RemoteEntry entry, String octal,
-            String owner, String group, boolean ownershipChanged, Consumer<String> statusUpdater, Runnable onApplied,
-            AuditRecorder auditRecorder) {
+            String owner, String group, boolean ownershipChanged, Consumer<String> statusUpdater,
+            Consumer<Boolean> busyUpdater, Runnable onApplied, AuditRecorder auditRecorder) {
         statusUpdater.accept("Counting affected items...");
+        busyUpdater.accept(true);
 
         Thread worker = new Thread(() -> {
             int count;
@@ -242,16 +254,17 @@ final class PermissionsDialog {
             }
             int finalCount = count;
             Platform.runLater(() -> {
+                busyUpdater.accept(false);
                 String message = finalCount >= 0
                         ? "This will change permissions on " + finalCount + " item(s) inside \"" + entry.name() + "\". Continue?"
                         : "This will recursively change permissions inside \"" + entry.name() + "\". Continue?";
                 Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, message, ButtonType.YES, ButtonType.NO);
-                ThemeManager.apply(confirm.getDialogPane());
+                ThemeManager.apply(confirm);
                 confirm.setHeaderText(null);
                 confirm.showAndWait().ifPresent(button -> {
                     if (button == ButtonType.YES) {
                         applyChanges(sessionManager, entry, octal, owner, group, ownershipChanged, true,
-                                statusUpdater, onApplied, auditRecorder);
+                                statusUpdater, busyUpdater, onApplied, auditRecorder);
                     } else {
                         statusUpdater.accept("Permissions change cancelled.");
                     }
@@ -263,9 +276,10 @@ final class PermissionsDialog {
     }
 
     private static void applyChanges(SshSessionManager sessionManager, RemoteEntry entry, String octal, String owner,
-            String group, boolean ownershipChanged, boolean recursive, Consumer<String> statusUpdater, Runnable onApplied,
-            AuditRecorder auditRecorder) {
+            String group, boolean ownershipChanged, boolean recursive, Consumer<String> statusUpdater,
+            Consumer<Boolean> busyUpdater, Runnable onApplied, AuditRecorder auditRecorder) {
         statusUpdater.accept("Applying permissions to " + entry.name() + "...");
+        busyUpdater.accept(true);
 
         String action = "chmod " + octal + (ownershipChanged ? " / chown " + owner + ":" + group : "")
                 + " on " + entry.path() + (recursive ? " (recursive)" : "");
@@ -278,12 +292,16 @@ final class PermissionsDialog {
                 }
                 auditRecorder.log(action, "success", null);
                 Platform.runLater(() -> {
+                    busyUpdater.accept(false);
                     statusUpdater.accept("Permissions updated.");
                     onApplied.run();
                 });
             } catch (Exception e) {
                 auditRecorder.log(action, "failure", e.getMessage());
-                Platform.runLater(() -> statusUpdater.accept("Permissions update failed: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    busyUpdater.accept(false);
+                    statusUpdater.accept("Permissions update failed: " + e.getMessage());
+                });
             }
         }, "sftp-permissions-apply");
         worker.setDaemon(true);
