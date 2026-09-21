@@ -50,15 +50,33 @@ public final class ThemeManager {
         apply(dialog.getDialogPane());
         dialog.getDialogPane().setGraphic(null);
         dialog.initStyle(StageStyle.UNDECORATED);
+
+        // HeavyweightDialog.show()/showAndWait() force the scene root back to the bare DialogPane
+        // *after* the DIALOG_SHOWING event fires, so wrapping the root there throws
+        // "DialogPane is already inside a scene-graph". Wait for the stage's own onShown instead,
+        // which runs once the DialogPane is safely installed as the root.
         dialog.setOnShowing(event -> {
             Scene scene = dialog.getDialogPane().getScene();
             Stage stage = (Stage) scene.getWindow();
-            Parent original = scene.getRoot();
-            BorderPane shell = new BorderPane(original);
-            scene.setRoot(shell);
-            apply(scene);
-            String title = dialog.getTitle() == null || dialog.getTitle().isBlank() ? "LinuxDesk" : dialog.getTitle();
-            shell.setTop(new TitleBar(stage, scene, title));
+            stage.setOnShown(shown -> {
+                Parent original = scene.getRoot();
+                if (original instanceof BorderPane) {
+                    return; // already wrapped (reused dialog)
+                }
+                BorderPane shell = new BorderPane(original);
+                scene.setRoot(shell);
+                apply(scene);
+                String title = dialog.getTitle() == null || dialog.getTitle().isBlank() ? "LinuxDesk" : dialog.getTitle();
+                shell.setTop(new TitleBar(stage, scene, title));
+            });
+        });
+
+        // Release the DialogPane from the wrapper on hide so a reused dialog can re-root cleanly.
+        dialog.setOnHidden(event -> {
+            Scene scene = dialog.getDialogPane().getScene();
+            if (scene != null && scene.getRoot() instanceof BorderPane shell) {
+                shell.setCenter(null);
+            }
         });
     }
 

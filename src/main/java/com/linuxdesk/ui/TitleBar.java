@@ -5,6 +5,8 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.stage.Stage;
@@ -23,7 +25,10 @@ public class TitleBar extends HBox {
         getStyleClass().add("title-bar");
         setPrefHeight(38);
 
-        Label icon = new Label("⌘");
+        ImageView icon = new ImageView(new Image(TitleBar.class.getResourceAsStream("/com/linuxdesk/icon-32.png")));
+        icon.setFitWidth(18);
+        icon.setFitHeight(18);
+        icon.setSmooth(true);
         icon.getStyleClass().add("title-bar-icon");
 
         Label title = new Label(titleText);

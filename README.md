@@ -105,7 +105,7 @@ Early v1, in active development — but already well past a toy. The login windo
 - Profiles are a flat list — no nested folders/groups, free-form tags, or a health/reachability indicator (`FR-CON-052–053, 060`). No import from PuTTY/WinSCP/`~/.ssh/config`/Termius, no encrypted export (`FR-CON-057–058`). The Production flag only gates recursive folder deletes; it doesn't (yet) extend to service stop/restart or package removal, and there's no title-bar-wide red tint — just a toolbar badge.
 - No explicit bookmarks (`FR-CON-070–071`) — recent folders cover the common case for a single-user tool, but there's no way to pin a directory you don't happen to have visited recently. Connection history doesn't track session duration or disconnect reason (`FR-CON-072`), just host/port/username/timestamp. Recent folders/files can only be cleared all-at-once per host, not removed one at a time (connection history *does* support single-item removal).
 - SFTP has no server-side copy command, so Paste streams file bytes through the client; large files/directories will be slower than a native `cp` on the server.
-- Upload/Download has no progress bar, pause/resume, or parallel streams — it's a single blocking transfer per file with only a status-bar message until it finishes.
+- Upload/Download shows a determinate progress bar (real byte-level tracking, computed over the whole file/folder tree up front) but has no pause/resume or parallel streams — it's a single transfer at a time.
 - The terminal is a simple line-based PTY console, not a full terminal emulator — full-screen interactive programs (vim, top, less) won't render correctly in it.
 - Service control actions assume passwordless sudo (`sudo -n`) for the connected user; on a host without it configured, Start/Stop/Restart/Enable/Disable will fail with a permission error surfaced in the status bar rather than prompting for a password.
 - The log viewer keeps every loaded line in memory for the life of the window (no windowed/bounded loading) and filters by plain substring match, not regex — fine for typical sessions, but not meant for tailing a firehose log for hours or matching complex patterns.
@@ -188,3 +188,4 @@ src/main/resources/com/linuxdesk/
   dark-theme.css
   light-theme.css
 ```
+$env:JAVA_HOME = "C:\Program Files\Java\jdk-21"; mvn -q clean javafx:run

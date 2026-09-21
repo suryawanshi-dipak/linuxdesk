@@ -101,4 +101,41 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+      javafx-controls/javafx-fxml resolve to a tiny classifier-less stub jar (API only, no native
+      libs) unless something sets ${javafx.platform}, which their own poms use to pull in the real
+      per-OS jar (javafx-*-win/mac/linux.jar). javafx:run resolves this itself internally, but a
+      plain `mvn package` + `dependency:copy-dependencies` (used to stage a jpackage app-image)
+      needs it set explicitly - hence these OS-activated profiles, the standard OpenJFX recipe.
+    -->
+    <profiles>
+        <profile>
+            <id>javafx-platform-win</id>
+            <activation>
+                <os><family>windows</family></os>
+            </activation>
+            <properties>
+                <javafx.platform>win</javafx.platform>
+            </properties>
+        </profile>
+        <profile>
+            <id>javafx-platform-mac</id>
+            <activation>
+                <os><family>mac</family></os>
+            </activation>
+            <properties>
+                <javafx.platform>mac</javafx.platform>
+            </properties>
+        </profile>
+        <profile>
+            <id>javafx-platform-linux</id>
+            <activation>
+                <os><family>unix</family></os>
+            </activation>
+            <properties>
+                <javafx.platform>linux</javafx.platform>
+            </properties>
+        </profile>
+    </profiles>
 </project>
