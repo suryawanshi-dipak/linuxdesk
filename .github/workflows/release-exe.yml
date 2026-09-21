@@ -1,7 +1,7 @@
 name: Build Windows EXE and Release
 
-# Builds a portable Windows app image (LinuxDesk.exe + bundled JRE) with jpackage every time
-# main is pushed, and publishes it as a GitHub Release asset.
+# Builds a Windows installer (LinuxDesk-<version>.exe, via jpackage + WiX) every time main is
+# pushed, and publishes it as a GitHub Release asset.
 on:
   push:
     branches: [main]
@@ -24,6 +24,20 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Add WiX Toolset to PATH
+        shell: pwsh
+        run: |
+          # jpackage --type exe shells out to WiX's candle/light. windows-latest ships WiX 3.x
+          # under Program Files (x86) but doesn't put it on PATH.
+          $wix = Get-ChildItem "C:\Program Files (x86)\WiX Toolset*" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($wix) {
+            "$($wix.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            Write-Host "WiX found at: $($wix.FullName)\bin"
+          } else {
+            Write-Error "WiX Toolset not found. jpackage --type exe requires WiX 3.x."
+            exit 1
+          }
+
       - name: Read project version
         id: ver
         shell: pwsh
@@ -33,37 +47,38 @@ jobs:
 
       - name: Build application jar
         shell: pwsh
-        run: mvn -B -DskipTests clean package
+        run: mvn -B "-DskipTests" clean package
 
       - name: Stage runtime classpath for jpackage
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path target\dist | Out-Null
-          mvn -B -q dependency:copy-dependencies -DoutputDirectory=target\dist -DincludeScope=runtime
+          mvn -B -q dependency:copy-dependencies "-DoutputDirectory=target\dist" "-DincludeScope=runtime"
           Copy-Item "target\linuxdesk-${{ steps.ver.outputs.version }}.jar" target\dist\
 
-      - name: Package portable app image with jpackage
+      - name: Build Windows EXE installer
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
           jpackage `
-            --type app-image `
+            --type exe `
             --input target\dist `
-            --dest target\jpackage `
+            --dest dist `
             --name LinuxDesk `
             --main-jar "linuxdesk-${{ steps.ver.outputs.version }}.jar" `
             --main-class com.linuxdesk.Launcher `
             --icon packaging\icon.ico `
             --app-version "${{ steps.ver.outputs.version }}" `
-            --vendor "LinuxDesk"
-
-      - name: Zip app image
-        shell: pwsh
-        run: Compress-Archive -Path target\jpackage\LinuxDesk\* -DestinationPath LinuxDesk-windows-x64.zip
+            --vendor "LinuxDesk" `
+            --description "LinuxDesk - SSH remote desktop client" `
+            --win-menu `
+            --win-shortcut `
+            --win-dir-chooser
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}-${{ github.run_number }}
           name: LinuxDesk v${{ steps.ver.outputs.version }} (build ${{ github.run_number }})
-          files: LinuxDesk-windows-x64.zip
+          files: dist/*.exe
           generate_release_notes: true
