@@ -1,0 +1,69 @@
+name: Build Windows EXE and Release
+
+# Builds a portable Windows app image (LinuxDesk.exe + bundled JRE) with jpackage every time
+# main is pushed, and publishes it as a GitHub Release asset.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (includes jpackage)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Read project version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = mvn -q "-Dexpression=project.version" "-DforceStdout" help:evaluate
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build application jar
+        shell: pwsh
+        run: mvn -B -DskipTests clean package
+
+      - name: Stage runtime classpath for jpackage
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path target\dist | Out-Null
+          mvn -B -q dependency:copy-dependencies -DoutputDirectory=target\dist -DincludeScope=runtime
+          Copy-Item "target\linuxdesk-${{ steps.ver.outputs.version }}.jar" target\dist\
+
+      - name: Package portable app image with jpackage
+        shell: pwsh
+        run: |
+          jpackage `
+            --type app-image `
+            --input target\dist `
+            --dest target\jpackage `
+            --name LinuxDesk `
+            --main-jar "linuxdesk-${{ steps.ver.outputs.version }}.jar" `
+            --main-class com.linuxdesk.Launcher `
+            --icon packaging\icon.ico `
+            --app-version "${{ steps.ver.outputs.version }}" `
+            --vendor "LinuxDesk"
+
+      - name: Zip app image
+        shell: pwsh
+        run: Compress-Archive -Path target\jpackage\LinuxDesk\* -DestinationPath LinuxDesk-windows-x64.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}-${{ github.run_number }}
+          name: LinuxDesk v${{ steps.ver.outputs.version }} (build ${{ github.run_number }})
+          files: LinuxDesk-windows-x64.zip
+          generate_release_notes: true
